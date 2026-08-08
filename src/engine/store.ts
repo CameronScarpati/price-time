@@ -9,8 +9,10 @@ import type { Micro, OrderId, PriceTick, Sats, Seq, Side } from "./types";
  * and the frame packer (worker) reads these arrays directly when building the
  * binary frame the renderer consumes — the store IS the wire format's source.
  *
- * Numeric ranges: ticks fit Int32 (cents up to $21M); ids, sats, seq and micro
- * are integers < 2^53, stored exactly in Float64Array.
+ * Numeric ranges: ids, ticks, sats, seq and micro are integers < 2^53, stored
+ * exactly in Float64Array. Ticks deliberately do NOT use Int32: real books
+ * carry fishing orders at prices past $21M, which would wrap Int32 negative
+ * and corrupt the ask side (found by the captured-session golden test).
  */
 
 export const NIL = -1;
@@ -21,7 +23,7 @@ export const FLAG_LIQUIDATION = 1;
 export class OrderStore {
   capacity: number;
   id!: Float64Array;
-  tick!: Int32Array;
+  tick!: Float64Array;
   sats!: Float64Array;
   side!: Uint8Array;
   flags!: Uint8Array;
@@ -45,7 +47,7 @@ export class OrderStore {
 
   private allocateArrays(capacity: number): void {
     this.id = new Float64Array(capacity);
-    this.tick = new Int32Array(capacity);
+    this.tick = new Float64Array(capacity);
     this.sats = new Float64Array(capacity);
     this.side = new Uint8Array(capacity);
     this.flags = new Uint8Array(capacity);
