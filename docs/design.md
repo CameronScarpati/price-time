@@ -331,6 +331,17 @@ Nothing at rest; everything within one gesture:
 4. **The explainer** — from the provenance mark: what this is, what the queue means,
    what to watch for, what is and isn't real. Three short layers, never a wall.
 
+### Attribution and framing
+
+This is a portfolio piece by **Cameron Scarpati**, and the page says so without
+crowding the spell: the explainer's first layer opens with the byline and the
+framing — the beauty of markets, as he sees it — and a one-line credit sits in the
+engaged chrome next to the provenance mark ("a piece by Cameron Scarpati · data:
+Bitstamp"). Page `<title>`, meta description, and social-card tags carry the same
+credit. The README leads with the byline and is written to be read by someone
+deciding whether to hire the person who built it. Bitstamp's attribution (required
+posture, §1) and the author's credit are the only two names on the page.
+
 Rejected composition: the Bookmap-style time-axis heatmap. The brief identifies it
 as both honest and cliché; more decisively, a scrolling history axis makes the
 present a thin edge of the screen, and this piece is about the *present tense* of
@@ -538,7 +549,8 @@ src/
 tools/           probe, capture, soak, flood (perf harness)
 docs/            brief.md, design.md
 .claude/skills/  book-reconstruction, engine-invariants, device-performance,
-                 truth-rules (+ capture-replay if it earns its place)
+                 truth-rules, visual-craft, verifying-a-change
+                 (+ capture-replay if it earns its place)
 ```
 
 Build order (per the brief's recommendations and Stage B's discipline): engine +
