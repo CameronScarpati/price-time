@@ -47,6 +47,10 @@ wss.on("connection", (client) => {
     else pendingToUpstream.push(text);
   });
   client.on("close", () => upstream.close());
+  // An abrupt browser disconnect surfaces as an 'error' event; unhandled,
+  // it would crash the whole relay.
+  client.on("error", () => upstream.close());
 });
+wss.on("error", (err) => console.error("wss error:", err.message));
 
 http.listen(PORT, () => console.log(`relay: ws://localhost:${PORT} and http://localhost:${PORT}/api/... → bitstamp`));

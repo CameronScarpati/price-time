@@ -137,7 +137,7 @@ export class Ui {
     const clock = meta.clock;
     this.clockChip.textContent =
       clock.state === "live"
-        ? this.mode === "replay" ? "replay" : this.mode === "synthetic" ? "simulated" : "live"
+        ? meta.mode === "replay" ? "replay" : meta.mode === "synthetic" ? "simulated" : "live"
         : clock.state === "paused"
           ? `paused · ${(clock.behindMs / 1000).toFixed(0)}s behind`
           : `catching up ×${clock.speed} · ${(clock.behindMs / 1000).toFixed(0)}s`;

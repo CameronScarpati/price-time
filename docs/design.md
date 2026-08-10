@@ -200,7 +200,15 @@ replay the buffer **idempotently**: `order_created` → upsert, `order_changed` 
 upsert (set amount), `order_deleted` → remove-if-present, any event for an unknown
 id that predates the snapshot → apply what it implies, never error. Idempotent
 replay makes the snapshot/buffer overlap safe without trusting timestamp
-comparisons at microsecond granularity.
+comparisons at microsecond granularity — in one direction. The other direction was
+found the hard way during the build (a congested path made it reproducible): **if
+socket delivery lags the snapshot, the buffer holds creates and changes from before
+the snapshot moment for orders the snapshot already saw die, and replaying them
+resurrects dead orders as phantoms** — stale quotes inside the spread, a book that
+crosses itself and looks plausible doing it. So the drain has one timestamp rule:
+deletions always apply (unknown ids are ignored), but rests and reduces strictly
+older than the snapshot's `microtimestamp` are dropped. Venue event stamps and the
+snapshot stamp share the venue's clock, which is what makes the comparison sound.
 
 **Gap detection.** Maintain the `event_id` chain. Any message whose `pre_event_id`
 does not equal the last seen `event_id` is a gap. On gap: discard the book,
@@ -288,14 +296,20 @@ the struck queue front — presentation of a real trade event whose side is know
 from the trade print. `is_liquidation` orders get a distinct mark (explained in the
 explainer; rare, worth celebrating when it appears).
 
-The camera frames ±0.4% around mid at rest (~300 living orders) and tracks the mid
-with slow spring easing (presentation). **The camera never moves on its own** — it
-moves only in response to data (mid drift, a detected moment) or the user
-(scroll/pinch to zoom). Zooming out reveals the whole 8,725-order field, the long
-sparse tail of distant stale orders glowing dim — and as cell separators drop below
-a pixel, individual orders optically merge into solid depth bars: the L3→L2
-aggregation happens in the viewer's eye, which is the most honest possible way to
-show what aggregation is.
+The camera frames the **populated neighborhood** at rest — out to roughly the 4th
+occupied level each side, clamped so rows never fall below queue legibility — and
+tracks the mid with slow spring easing (presentation). A fixed percentage band was
+the original design and it failed against reality twice in one afternoon: on a thin
+day it framed two lonely levels in a void, and any fixed tick span assumes a level
+density real books don't have (BTC/USD levels scatter tens of ticks apart even when
+liquid). Likewise the cell length scale anchors on the *visible core's* median
+order size, not any global statistic — whale quotes and far-tail dust drag a global
+median across decades. **The camera never moves on its own** — it moves only in
+response to data (mid drift, a detected moment) or the user (scroll/pinch to zoom).
+Zooming out reveals the whole ~9,000-order field, the long sparse tail of distant
+stale orders glowing dim — and as cell separators drop below a pixel, individual
+orders optically merge into solid depth bars: the L3→L2 aggregation happens in the
+viewer's eye, which is the most honest possible way to show what aggregation is.
 
 At rest the screen is wordless except the provenance line (§10). No axes, no
 numbers, nothing to read. The composition *is* the information.
@@ -392,8 +406,16 @@ labeled playback-time effect (§10), never a silent lag.
 | Bundle | ≤ 150KB gzipped JS | build output; no framework makes this comfortable |
 | Battery/data | hidden tab disconnects WS within 5s; live stream ≈ 30KB/s disclosed in explainer; metered/reduced-data falls back to replay | Page Visibility API; Network Information where available |
 
-An in-page perf HUD (dev flag) shows the live frame-time distribution so on-device
+An in-page perf HUD (`?hud=1`) shows the live frame-time distribution so on-device
 measurement is a matter of opening the page, per the performance skill.
+
+**Measured so far** (results also in the README): worker-side `packFrame` costs
+1.27ms for the full 8,768-order live book (Node bench, `test/perf/pack-bench`);
+shipped JS is ~10KB gzip main + ~12KB worker against the 150KB budget; the live
+soak numbers are in `docs/perf/`. Frame-time percentiles from this build
+environment's software-rasterized headless Chromium are not meaningful GPU numbers
+and are not quoted as such; the on-device measurements the budget requires are an
+open item recorded in the README until run on real hardware.
 
 ---
 
