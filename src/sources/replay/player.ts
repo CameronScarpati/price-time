@@ -56,12 +56,27 @@ export class ReplaySource implements FlowSource {
     this.speed = speed;
   }
 
+  /** Pause holds the playback cursor; capture time simply stops advancing. */
+  pause(): void {
+    if (this.timer !== null) clearTimeout(this.timer);
+    this.timer = null;
+    this.paused = true;
+  }
+
+  resume(): void {
+    if (!this.paused) return;
+    this.paused = false;
+    this.pump();
+  }
+
+  private paused = false;
+
   /** Emit all records due at or before capture-time `consumedMs`, then sleep
    * until the next one. Instant (speed = Infinity) drains synchronously. */
   private pump(): void {
     this.timer = null;
     const sink = this.sink;
-    if (sink === null) return;
+    if (sink === null || this.paused) return;
 
     while (this.index < this.records.length) {
       const record = this.records[this.index];
@@ -86,7 +101,19 @@ export class ReplaySource implements FlowSource {
       }
       if (record.type === "snapshot") {
         this.seeded = true;
-        for (const buffered of this.preSeedBuffer) sink(buffered);
+        // Same drain discipline as the live source: state-bearing events
+        // older than the snapshot moment would resurrect dead orders.
+        const snapMicro = Number(record.data.microtimestamp);
+        for (const buffered of this.preSeedBuffer) {
+          if (
+            buffered.type === "command" &&
+            (buffered.cmd.kind === "rest" || buffered.cmd.kind === "reduce") &&
+            buffered.cmd.micro < snapMicro
+          ) {
+            continue;
+          }
+          sink(buffered);
+        }
         this.preSeedBuffer = [];
         sink({ type: "status", status: { phase: "flowing" } });
       }

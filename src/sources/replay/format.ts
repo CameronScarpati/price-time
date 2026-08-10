@@ -20,12 +20,17 @@ export function parseCapture(jsonl: string): CaptureRecord[] {
   return records;
 }
 
-/** Fetch and decompress a .jsonl.gz capture in the browser. */
+/** Fetch a capture, decompressing only if the bytes are actually gzip.
+ * Hosts disagree about .gz: some send Content-Encoding and the browser
+ * decompresses transparently, others serve raw bytes — so sniff the gzip
+ * magic number rather than trusting the extension or the headers. */
 export async function loadCapture(url: string): Promise<CaptureRecord[]> {
   const res = await fetch(url);
-  if (!res.ok || res.body === null) throw new Error(`capture fetch failed: ${res.status}`);
-  const stream = url.endsWith(".gz")
-    ? res.body.pipeThrough(new DecompressionStream("gzip"))
-    : res.body;
-  return parseCapture(await new Response(stream).text());
+  if (!res.ok) throw new Error(`capture fetch failed: ${res.status}`);
+  const bytes = new Uint8Array(await res.arrayBuffer());
+  if (bytes.length >= 2 && bytes[0] === 0x1f && bytes[1] === 0x8b) {
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
+    return parseCapture(await new Response(stream).text());
+  }
+  return parseCapture(new TextDecoder().decode(bytes));
 }

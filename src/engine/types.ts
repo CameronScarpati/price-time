@@ -140,6 +140,8 @@ export interface TradeEvent {
   sats: Sats;
   /** Maker's remaining quantity after this fill. */
   makerRemaining: Sats;
+  /** The consumed maker was a forced liquidation (venue-flagged). */
+  liquidation: boolean;
   seq: Seq;
 }
 export interface CanceledEvent {
@@ -149,6 +151,8 @@ export interface CanceledEvent {
   tick: PriceTick;
   /** Quantity that was still resting when the order was pulled. */
   sats: Sats;
+  /** Quantity that was queued ahead of it — where in the line it died. */
+  aheadSats: Sats;
   seq: Seq;
 }
 /** Pure resize with no trade (rare; live only). Position is kept. */

@@ -1,0 +1,108 @@
+import { Renderer } from "./render/renderer";
+import { Ui } from "./ui/ui";
+import type { MainToWorker } from "./worker/protocol";
+import type { SourceKind } from "./sources/source";
+
+/**
+ * Boot: a worker for the truth, a renderer for the looking, a UI for the
+ * words. URL parameters for the modes that need asking for:
+ *   ?mode=live|synthetic|replay   (default: auto — live, degrading honestly)
+ *   ?seed=42                      (synthetic determinism)
+ *   ?hud=1                        (frame-time HUD)
+ */
+function boot(): void {
+  const root = document.getElementById("app")!;
+  const params = new URLSearchParams(location.search);
+
+  const glCanvas = document.createElement("canvas");
+  glCanvas.className = "layer";
+  const overlayCanvas = document.createElement("canvas");
+  overlayCanvas.className = "layer";
+  root.append(glCanvas, overlayCanvas);
+
+  const worker = new Worker(new URL("./worker/main.ts", import.meta.url), { type: "module" });
+
+  let renderer: Renderer;
+  const ui = new Ui(root, worker, () => renderer, params.get("hud") === "1");
+  try {
+    renderer = new Renderer(glCanvas, overlayCanvas, worker, ui);
+  } catch {
+    ui.fatal("this piece needs WebGL2 — a browser from the last few years will have it");
+    return;
+  }
+
+  const mode = (params.get("mode") ?? "auto") as "auto" | SourceKind;
+  const seed = Number(params.get("seed") ?? Date.now() % 2 ** 31);
+  const replayUrl = params.get("replay") ?? new URL("replay/session.jsonl.gz", document.baseURI).href;
+  const wsUrl = params.get("ws") ?? undefined;
+  const restBase = params.get("rest") ?? undefined;
+  worker.postMessage({
+    type: "init", mode, seed, replayUrl,
+    ...(wsUrl !== undefined ? { wsUrl } : {}),
+    ...(restBase !== undefined ? { restBase } : {}),
+  } satisfies MainToWorker);
+
+  const resize = (): void => {
+    const dpr = Math.min(devicePixelRatio, 2);
+    renderer.resize(innerWidth, innerHeight, dpr);
+  };
+  resize();
+  addEventListener("resize", resize);
+
+  document.addEventListener("visibilitychange", () => {
+    worker.postMessage({ type: "hidden", hidden: document.hidden } satisfies MainToWorker);
+  });
+
+  // Input: drag pans price, wheel/pinch zooms, hover/tap inspects.
+  let dragging = false;
+  let lastY = 0;
+  let pinchDist = 0;
+  glCanvas.style.touchAction = "none";
+  window.addEventListener("pointerdown", (e) => {
+    dragging = true;
+    lastY = e.clientY;
+  });
+  window.addEventListener("pointerup", (e) => {
+    dragging = false;
+    ui.inspectAt(e.clientX, e.clientY);
+  });
+  window.addEventListener("pointermove", (e) => {
+    if (dragging && e.buttons > 0) {
+      renderer.camera.panTicks((e.clientY - lastY) / renderer.camera.pxPerTick, performance.now());
+      lastY = e.clientY;
+    } else if (e.pointerType === "mouse") {
+      ui.inspectAt(e.clientX, e.clientY);
+    }
+  });
+  window.addEventListener("wheel", (e) => {
+    renderer.camera.wheelZoom(e.deltaY);
+  }, { passive: true });
+  window.addEventListener("touchmove", (e) => {
+    if (e.touches.length === 2) {
+      const [a, b] = [e.touches[0], e.touches[1]];
+      const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+      if (pinchDist > 0) renderer.camera.pinchZoom(d / pinchDist);
+      pinchDist = d;
+    }
+  }, { passive: true });
+  window.addEventListener("touchend", () => {
+    pinchDist = 0;
+  });
+
+  const frame = (t: number): void => {
+    renderer.tick(t);
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+
+  // Dev hook for headless inspection (tools/screenshot.mjs and friends).
+  (window as unknown as { __pt: unknown }).__pt = {
+    camera: renderer.camera,
+    layout: () => renderer.layoutParams,
+    stats: () => renderer.frameStats(),
+    book: () => ({ bestBid: renderer.bestBid, bestAsk: renderer.bestAsk }),
+    frame: () => renderer.debugFrame(),
+  };
+}
+
+boot();

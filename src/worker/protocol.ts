@@ -36,6 +36,10 @@ export const Header = {
   SpreadTicks: 4,
   BidDepthNearSats: 5,
   AskDepthNearSats: 6,
+  /** Camera hint: half-span (ticks from mid) that keeps ~15 occupied levels
+   * per side in frame. Books are gappy — a fixed tick span frames nothing on
+   * a thin day and a wall on a dense one. */
+  SpanHintTicks: 7,
 } as const;
 
 /** A discrete market event the renderer may animate (decay/stagger are the
@@ -43,7 +47,7 @@ export const Header = {
  * are capped per frame and the overflow count is reported. */
 export type RenderEvent =
   | { kind: "trade"; tick: PriceTick; sats: Sats; aggressor: Side; liquidation: boolean }
-  | { kind: "cancel"; tick: PriceTick; side: Side; sats: Sats };
+  | { kind: "cancel"; tick: PriceTick; side: Side; sats: Sats; aheadSats: Sats };
 
 export interface TapeRow {
   tick: PriceTick;
@@ -61,6 +65,9 @@ export interface ClockInfo {
 
 export interface FrameMeta {
   mode: SourceKind;
+  /** Synthetic only: whether the simulation continues a real book (handoff)
+   * or assembled from nothing — the provenance line words differ. */
+  seededFromLive: boolean;
   /** True while the source is degraded and the book may be stale (seeding). */
   degraded: boolean;
   clock: ClockInfo;
@@ -69,7 +76,16 @@ export interface FrameMeta {
   tape: TapeRow[];
   caption: { text: string; id: number } | null;
   narration: string;
-  stats: { msgsPerSec: number; tradesPerMin: number; orders: number; anomalies: number };
+  stats: {
+    msgsPerSec: number;
+    tradesPerMin: number;
+    orders: number;
+    anomalies: number;
+    /** Median size of the orders in the book's top levels — the renderer's
+     * length-scale anchor. A global statistic won't do: whale quotes and
+     * far-tail dust drag it across decades. */
+    coreMedianSats: number;
+  };
   /** Set on the frame where authority changed; triggers the cross-fade. */
   transition: { from: SourceKind; to: SourceKind } | null;
 }
@@ -87,7 +103,15 @@ export interface InspectionResult {
 }
 
 export type MainToWorker =
-  | { type: "init"; mode: "auto" | SourceKind; seed: number; replayUrl?: string }
+  | {
+      type: "init";
+      mode: "auto" | SourceKind;
+      seed: number;
+      replayUrl?: string;
+      /** Dev-only endpoint overrides (local relay in sandboxed environments). */
+      wsUrl?: string;
+      restBase?: string;
+    }
   | { type: "frame"; buffer: ArrayBuffer }
   | { type: "pause" }
   | { type: "resume" }

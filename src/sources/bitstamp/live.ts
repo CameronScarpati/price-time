@@ -198,11 +198,26 @@ export class BitstampLiveSource implements FlowSource {
       type: "command",
       cmd: { kind: "seed", orders: normalizeSnapshot(snapshot, this.instrument) },
     });
-    // Events that arrived while the snapshot was in flight: idempotent apply
-    // makes the overlap between them and the snapshot harmless.
+    // Drain the buffer on top of the seed. Idempotent apply makes overlap
+    // harmless in one direction only — the other direction is a trap: if the
+    // socket lags the snapshot (slow tab, congested path), the buffer holds
+    // rests/reduces from BEFORE the snapshot moment for orders the snapshot
+    // already saw die. Applying those resurrects dead orders as phantoms that
+    // cross the book. Deletions are always safe (unknown ids are ignored);
+    // state-bearing events strictly older than the snapshot are dropped.
+    const snapMicro = Number(snapshot.microtimestamp);
     const buffered = this.buffer;
     this.buffer = [];
-    for (const event of buffered) this.emit(event);
+    for (const event of buffered) {
+      if (
+        event.type === "command" &&
+        (event.cmd.kind === "rest" || event.cmd.kind === "reduce") &&
+        event.cmd.micro < snapMicro
+      ) {
+        continue;
+      }
+      this.emit(event);
+    }
 
     this.phase = "flowing";
     this.reconnectAttempts = 0;

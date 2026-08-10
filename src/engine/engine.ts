@@ -424,6 +424,7 @@ export class Engine {
       tick: this.store.tick[slot],
       sats: qty,
       makerRemaining: remaining,
+      liquidation: (this.store.flags[slot] & FLAG_LIQUIDATION) !== 0,
       seq: this.seq++,
     });
     if (remaining > 0) {
@@ -436,12 +437,17 @@ export class Engine {
 
   private removeResting(slot: number, events: EngineEvent[]): void {
     const side = this.store.side[slot] as Side;
+    let aheadSats = 0;
+    for (let p = this.store.prev[slot]; p !== NIL; p = this.store.prev[p]) {
+      aheadSats += this.store.sats[p];
+    }
     events.push({
       kind: "canceled",
       id: this.store.id[slot],
       side,
       tick: this.store.tick[slot],
       sats: this.store.sats[slot],
+      aheadSats,
       seq: this.seq++,
     });
     this.sideBook(side).unlink(this.store, slot);
