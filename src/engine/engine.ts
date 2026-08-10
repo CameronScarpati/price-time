@@ -1,6 +1,7 @@
 import { BookSide } from "./book";
 import { FLAG_LIQUIDATION, NIL, OrderStore } from "./store";
 import {
+  EXPECTED_ANOMALIES,
   Side,
   opposite,
   type AnomalyKind,
@@ -30,6 +31,10 @@ import {
  * counted as anomalies, never corrected. Both authorities consume queues
  * through the same code path (`consumeSlot`), which is what keeps live mode
  * honest: the engine that renders is the engine that matches.
+ *
+ * Commands from the wrong authority throw: the pipeline owns exactly one
+ * stream per engine, so a mixed stream is a programming error, not a market
+ * condition to absorb.
  */
 export class Engine {
   readonly authority: MatchAuthority;
@@ -64,32 +69,54 @@ export class Engine {
     return bid === undefined || ask === undefined ? undefined : ask - bid;
   }
 
+  /** Disagreements that indicate genuine divergence (reconstruction-protocol
+   * artifacts excluded) — the number the provenance UI surfaces. */
+  unexpectedAnomalyCount(): number {
+    let sum = 0;
+    for (const [kind, count] of this.anomalies) {
+      if (!EXPECTED_ANOMALIES.has(kind)) sum += count;
+    }
+    return sum;
+  }
+
   apply(cmd: Command): EngineEvent[] {
     const events: EngineEvent[] = [];
     switch (cmd.kind) {
       case "place":
+        this.requireAuthority("internal", cmd.kind);
         this.place(cmd, events);
         break;
       case "cancel":
+        this.requireAuthority("internal", cmd.kind);
         this.cancel(cmd.id, events);
         break;
       case "replace":
+        this.requireAuthority("internal", cmd.kind);
         this.replace(cmd.id, cmd.tick, cmd.sats, events);
         break;
       case "seed":
         this.seed(cmd.orders, events);
         break;
       case "rest":
+        this.requireAuthority("external", cmd.kind);
         this.rest(cmd, events);
         break;
       case "reduce":
+        this.requireAuthority("external", cmd.kind);
         this.reduce(cmd, events);
         break;
       case "remove":
+        this.requireAuthority("external", cmd.kind);
         this.remove(cmd, events);
         break;
     }
     return events;
+  }
+
+  private requireAuthority(needed: MatchAuthority, kind: string): void {
+    if (this.authority !== needed) {
+      throw new Error(`"${kind}" requires ${needed} authority; this engine is ${this.authority}`);
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -97,8 +124,12 @@ export class Engine {
   // -------------------------------------------------------------------------
 
   private place(cmd: PlaceCmd, events: EngineEvent[]): void {
-    if (cmd.sats <= 0 || !Number.isSafeInteger(cmd.sats)) {
+    if (!isValidSats(cmd.sats)) {
       events.push({ kind: "rejected", id: cmd.id, reason: "bad-quantity", seq: this.seq++ });
+      return;
+    }
+    if (cmd.tick !== null && !isValidTick(cmd.tick)) {
+      events.push({ kind: "rejected", id: cmd.id, reason: "bad-price", seq: this.seq++ });
       return;
     }
     if (this.store.slotOf(cmd.id) !== NIL) {
@@ -134,12 +165,7 @@ export class Engine {
 
     if (remaining > 0) {
       if (cmd.tick !== null && cmd.tif === "gtc") {
-        const slot = this.store.alloc(cmd.id, cmd.side, cmd.tick, remaining, this.seq, 0);
-        this.sideBook(cmd.side).enqueue(this.store, slot);
-        events.push({
-          kind: "rested", id: cmd.id, side: cmd.side, tick: cmd.tick,
-          sats: remaining, seq: this.seq++,
-        });
+        this.enqueueNew(cmd.id, cmd.side, cmd.tick, remaining, 0, 0, events);
       } else {
         // Market and IOC remainders evaporate; the event keeps quantity
         // conservation observable (and shows an aggressor exhausting the book).
@@ -158,6 +184,16 @@ export class Engine {
   }
 
   private replace(id: OrderId, tick: PriceTick, sats: Sats, events: EngineEvent[]): void {
+    // Validate everything BEFORE touching the resting order: a rejected
+    // replace must leave the original standing (cancel-replace is atomic).
+    if (!isValidSats(sats)) {
+      events.push({ kind: "rejected", id, reason: "bad-quantity", seq: this.seq++ });
+      return;
+    }
+    if (!isValidTick(tick)) {
+      events.push({ kind: "rejected", id, reason: "bad-price", seq: this.seq++ });
+      return;
+    }
     const slot = this.store.slotOf(id);
     if (slot === NIL) {
       events.push({ kind: "rejected", id, reason: "unknown-order", seq: this.seq++ });
@@ -204,61 +240,109 @@ export class Engine {
     this.bids.levels.clear();
     this.asks.ticks.length = 0;
     this.asks.levels.clear();
+    let seeded = 0;
     for (const o of orders) {
+      if (!isValidSats(o.sats) || !isValidTick(o.tick)) {
+        this.countAnomaly("invalid-external-value", o.id, events);
+        continue;
+      }
+      if (this.store.slotOf(o.id) !== NIL) {
+        // A snapshot listing one id twice is corrupt input; keeping the first
+        // occurrence and counting beats stranding an unreachable phantom.
+        this.countAnomaly("seed-duplicate-id", o.id, events);
+        continue;
+      }
       // Seed arrival order is queue order (verified against the venue:
       // group=2 snapshots list same-price orders in ascending-id order).
       const slot = this.store.alloc(o.id, o.side, o.tick, o.sats, this.seq++, o.micro);
       this.sideBook(o.side).enqueue(this.store, slot);
+      seeded++;
     }
-    events.push({ kind: "seeded", count: orders.length, seq: this.seq++ });
+    if (this.authority === "internal") {
+      // The internal matcher guarantees an uncrossed book, so it must not
+      // START crossed. The pipeline sanitizes handoff seeds; a crossed seed
+      // reaching this point is a bug upstream, and it fails loudly.
+      const bid = this.bestBid();
+      const ask = this.bestAsk();
+      if (bid !== undefined && ask !== undefined && bid >= ask) {
+        throw new Error(`internal seed is crossed: bid ${bid} >= ask ${ask}`);
+      }
+    }
+    events.push({ kind: "seeded", count: seeded, seq: this.seq++ });
   }
 
   private rest(cmd: RestCmd, events: EngineEvent[]): void {
+    if (!isValidSats(cmd.sats) || !isValidTick(cmd.tick)) {
+      this.countAnomaly("invalid-external-value", cmd.id, events);
+      return;
+    }
     const existing = this.store.slotOf(cmd.id);
     if (existing !== NIL) {
-      // Idempotent re-apply (snapshot/buffer overlap): adopt the venue's
-      // quantity, keep the queue position we already have.
-      if (this.store.sats[existing] !== cmd.sats) {
-        this.sideBook(this.store.side[existing] as Side).resize(this.store, existing, cmd.sats);
-      }
+      this.reconcileKnown(existing, cmd.side, cmd.tick, cmd.sats, events);
       this.countAnomaly("rest-existing-order", cmd.id, events);
       return;
     }
     const flags = cmd.liquidation ? FLAG_LIQUIDATION : 0;
-    const slot = this.store.alloc(cmd.id, cmd.side, cmd.tick, cmd.sats, this.seq, cmd.micro, flags);
-    this.sideBook(cmd.side).enqueue(this.store, slot);
-    events.push({
-      kind: "rested", id: cmd.id, side: cmd.side, tick: cmd.tick, sats: cmd.sats, seq: this.seq++,
-    });
+    this.enqueueNew(cmd.id, cmd.side, cmd.tick, cmd.sats, cmd.micro, flags, events);
   }
 
   private reduce(cmd: ReduceCmd, events: EngineEvent[]): void {
+    if (!isValidTick(cmd.tick) || !Number.isSafeInteger(cmd.sats) || cmd.sats < 0) {
+      this.countAnomaly("invalid-external-value", cmd.id, events);
+      return;
+    }
     const slot = this.store.slotOf(cmd.id);
     if (slot === NIL) {
       // An order from before our snapshot that we're only now hearing about:
       // adopt it at the venue's stated remaining rather than erroring.
       this.countAnomaly("reduce-unknown-order", cmd.id, events);
+      if (cmd.sats > 0) this.enqueueNew(cmd.id, cmd.side, cmd.tick, cmd.sats, cmd.micro, 0, events);
+      return;
+    }
+
+    if ((this.store.side[slot] as Side) !== cmd.side || this.store.tick[slot] !== cmd.tick) {
+      // The venue moved the order (a price modify is a real Bitstamp
+      // order_changed) — and a move is a cancel plus a re-add at the back,
+      // never a slide. A side change would be stranger still; both relocate,
+      // only the side change counts as an anomaly.
+      if ((this.store.side[slot] as Side) !== cmd.side) {
+        this.countAnomaly("side-changed", cmd.id, events);
+      }
+      const liquidation = (this.store.flags[slot] & FLAG_LIQUIDATION) !== 0;
+      this.removeResting(slot, events);
       if (cmd.sats > 0) {
-        this.rest({
-          kind: "rest", id: cmd.id, side: cmd.side, tick: cmd.tick,
-          sats: cmd.sats, micro: cmd.micro,
-        }, events);
+        this.enqueueNew(
+          cmd.id, cmd.side, cmd.tick, cmd.sats, cmd.micro,
+          liquidation ? FLAG_LIQUIDATION : 0, events,
+        );
       }
       return;
     }
+
     const current = this.store.sats[slot];
-    if (cmd.tradedSats > 0 && cmd.sats < current) {
-      this.consumeSlot(slot, current - cmd.sats, opposite(this.store.side[slot] as Side), null, events);
+    const delta = current - cmd.sats;
+    if (cmd.tradedSats > 0 && delta > 0) {
+      // A fill. The venue's own per-event traded quantity should equal our
+      // local delta; when it doesn't, the venue knows something we don't —
+      // apply the venue's end state and count the disagreement.
+      if (delta !== cmd.tradedSats) this.countAnomaly("traded-mismatch", cmd.id, events);
+      this.consumeSlot(slot, delta, opposite(cmd.side), null, events);
+      return;
+    }
+    if (cmd.tradedSats > 0 && delta <= 0) this.countAnomaly("traded-mismatch", cmd.id, events);
+    if (cmd.sats === current) return;
+    if (cmd.sats === 0) {
+      // Resized to nothing without a trade: that is a cancel, and leaving a
+      // zero-quantity order enqueued would fake the BBO.
+      this.removeResting(slot, events);
       return;
     }
     if (cmd.sats > current) this.countAnomaly("grew-in-place", cmd.id, events);
-    if (cmd.sats !== current) {
-      events.push({
-        kind: "resized", id: cmd.id, side: this.store.side[slot] as Side,
-        tick: this.store.tick[slot], from: current, to: cmd.sats, seq: this.seq++,
-      });
-      this.sideBook(this.store.side[slot] as Side).resize(this.store, slot, cmd.sats);
-    }
+    events.push({
+      kind: "resized", id: cmd.id, side: cmd.side, tick: cmd.tick,
+      from: current, to: cmd.sats, seq: this.seq++,
+    });
+    this.sideBook(cmd.side).resize(this.store, slot, cmd.sats);
   }
 
   private remove(cmd: RemoveCmd, events: EngineEvent[]): void {
@@ -269,16 +353,50 @@ export class Engine {
       return;
     }
     if (cmd.tradedSats > 0) {
-      // The deletion was a fill consuming the remainder.
-      this.consumeSlot(slot, this.store.sats[slot], opposite(this.store.side[slot] as Side), null, events);
+      // The deletion was a fill consuming the remainder. Our remainder should
+      // equal the venue's final traded slice; book what actually left our
+      // book, and count any disagreement in magnitude.
+      const current = this.store.sats[slot];
+      if (Number.isSafeInteger(cmd.tradedSats) && cmd.tradedSats !== current) {
+        this.countAnomaly("traded-mismatch", cmd.id, events);
+      }
+      this.consumeSlot(slot, current, opposite(this.store.side[slot] as Side), null, events);
       return;
     }
     this.removeResting(slot, events);
   }
 
+  /** Snapshot/buffer overlap reconciliation for an id we already hold: adopt
+   * the venue's price/side/quantity; a same-price resize keeps queue position
+   * (this path is protocol overlap, not a venue modify). */
+  private reconcileKnown(
+    slot: number, side: Side, tick: PriceTick, sats: Sats, events: EngineEvent[],
+  ): void {
+    if ((this.store.side[slot] as Side) !== side || this.store.tick[slot] !== tick) {
+      const id = this.store.id[slot];
+      const micro = this.store.micro[slot];
+      const liquidation = (this.store.flags[slot] & FLAG_LIQUIDATION) !== 0;
+      this.removeResting(slot, events);
+      this.enqueueNew(id, side, tick, sats, micro, liquidation ? FLAG_LIQUIDATION : 0, events);
+      return;
+    }
+    if (this.store.sats[slot] !== sats) {
+      this.sideBook(side).resize(this.store, slot, sats);
+    }
+  }
+
   // -------------------------------------------------------------------------
   // Shared paths.
   // -------------------------------------------------------------------------
+
+  private enqueueNew(
+    id: OrderId, side: Side, tick: PriceTick, sats: Sats, micro: number,
+    flags: number, events: EngineEvent[],
+  ): void {
+    const slot = this.store.alloc(id, side, tick, sats, this.seq, micro, flags);
+    this.sideBook(side).enqueue(this.store, slot);
+    events.push({ kind: "rested", id, side, tick, sats, seq: this.seq++ });
+  }
 
   /**
    * The one queue-consumption path (docs/design.md §2): every fill — matched
@@ -339,4 +457,12 @@ export class Engine {
 /** Does an order at `tick` on `side` cross a contra order at `contraTick`? */
 export function crosses(side: Side, tick: PriceTick, contraTick: PriceTick): boolean {
   return side === Side.Bid ? tick >= contraTick : tick <= contraTick;
+}
+
+function isValidSats(sats: number): boolean {
+  return Number.isSafeInteger(sats) && sats > 0;
+}
+
+function isValidTick(tick: number): boolean {
+  return Number.isSafeInteger(tick) && tick > 0;
 }

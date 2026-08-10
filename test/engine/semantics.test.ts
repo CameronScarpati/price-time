@@ -147,6 +147,75 @@ describe("cancel and cancel-replace", () => {
     const events = engine.apply({ kind: "replace", id: bid.id, tick: 10002, sats: 40 });
     expect(trades(events)).toHaveLength(1);
   });
+
+  it("an invalid replace rejects atomically — the resting order survives", () => {
+    const engine = new Engine("internal");
+    const { id } = place(engine, Side.Bid, 10000, 100);
+    const events = engine.apply({ kind: "replace", id, tick: 10000, sats: 0 });
+    expect(events).toEqual([
+      { kind: "rejected", id, reason: "bad-quantity", seq: expect.any(Number) },
+    ]);
+    expect(engine.bids.levels.get(10000)!.totalSats).toBe(100);
+  });
+});
+
+describe("validation and authority", () => {
+  it("rejects non-integer or non-positive prices and quantities", () => {
+    const engine = new Engine("internal");
+    expect(place(engine, Side.Bid, 10000.5, 10).events[0]).toMatchObject({
+      kind: "rejected", reason: "bad-price",
+    });
+    expect(place(engine, Side.Bid, NaN, 10).events[0]).toMatchObject({
+      kind: "rejected", reason: "bad-price",
+    });
+    expect(place(engine, Side.Bid, 10000, 0.5).events[0]).toMatchObject({
+      kind: "rejected", reason: "bad-quantity",
+    });
+  });
+
+  it("absorbs malformed external values without corrupting the book", () => {
+    const engine = new Engine("external");
+    engine.apply({ kind: "rest", id: 1, side: Side.Bid, tick: NaN, sats: 50, micro: 1 });
+    engine.apply({ kind: "rest", id: 2, side: Side.Bid, tick: 10000, sats: NaN, micro: 2 });
+    expect(engine.bestBid()).toBeUndefined();
+    expect(engine.anomalies.get("invalid-external-value")).toBe(2);
+  });
+
+  it("throws on commands from the wrong authority — a mixed stream is a bug, not a market", () => {
+    const internal = new Engine("internal");
+    expect(() => internal.apply({ kind: "remove", id: 1, tradedSats: 0, micro: 1 })).toThrow();
+    const external = new Engine("external");
+    expect(() =>
+      external.apply({ kind: "place", id: 1, side: Side.Bid, tick: 10000, sats: 10, tif: "gtc" }),
+    ).toThrow();
+  });
+
+  it("seed skips duplicate ids instead of stranding a phantom", () => {
+    const engine = new Engine("external");
+    const events = engine.apply({
+      kind: "seed",
+      orders: [
+        { id: 1, side: Side.Bid, tick: 10000, sats: 10, micro: 1 },
+        { id: 1, side: Side.Bid, tick: 10000, sats: 20, micro: 1 },
+      ],
+    });
+    expect(events.at(-1)).toMatchObject({ kind: "seeded", count: 1 });
+    expect(engine.bids.levels.get(10000)!.count).toBe(1);
+    expect(engine.anomalies.get("seed-duplicate-id")).toBe(1);
+  });
+
+  it("a crossed seed under internal authority fails loudly — the pipeline must sanitize", () => {
+    const engine = new Engine("internal");
+    expect(() =>
+      engine.apply({
+        kind: "seed",
+        orders: [
+          { id: 1, side: Side.Bid, tick: 10001, sats: 10, micro: 1 },
+          { id: 2, side: Side.Ask, tick: 10000, sats: 10, micro: 1 },
+        ],
+      }),
+    ).toThrow(/crossed/);
+  });
 });
 
 describe("external authority (live mode)", () => {
@@ -203,6 +272,51 @@ describe("external authority (live mode)", () => {
       kind: "reduce", id: 998, side: Side.Bid, tick: 9999, sats: 25, tradedSats: 0, micro: 2,
     });
     expect(reduced.some((e) => e.kind === "rested" && e.sats === 25)).toBe(true);
+  });
+
+  it("a venue resize-to-zero is a cancel, never a zero-quantity phantom", () => {
+    const engine = new Engine("external");
+    engine.apply({ kind: "rest", id: 1, side: Side.Bid, tick: 10000, sats: 50, micro: 1 });
+    const events = engine.apply({
+      kind: "reduce", id: 1, side: Side.Bid, tick: 10000, sats: 0, tradedSats: 0, micro: 2,
+    });
+    expect(events[0]).toMatchObject({ kind: "canceled", id: 1, sats: 50 });
+    expect(engine.bestBid()).toBeUndefined();
+  });
+
+  it("a venue price modify relocates to the back of the new level — cancel plus re-add, never a slide", () => {
+    const engine = new Engine("external");
+    engine.apply({ kind: "rest", id: 1, side: Side.Bid, tick: 10000, sats: 50, micro: 1 });
+    engine.apply({ kind: "rest", id: 2, side: Side.Bid, tick: 10001, sats: 50, micro: 2 });
+    const events = engine.apply({
+      kind: "reduce", id: 1, side: Side.Bid, tick: 10001, sats: 50, tradedSats: 0, micro: 3,
+    });
+    expect(events.map((e) => e.kind)).toEqual(["canceled", "rested"]);
+    const level = engine.bids.levels.get(10001)!;
+    expect(level.count).toBe(2);
+    expect(engine.store.id[level.head]).toBe(2); // the mover lost priority
+    expect(engine.unexpectedAnomalyCount()).toBe(0); // a price modify is normal
+  });
+
+  it("venue traded quantities that disagree with local state are applied and counted", () => {
+    const engine = new Engine("external");
+    engine.apply({ kind: "rest", id: 1, side: Side.Ask, tick: 10001, sats: 50, micro: 1 });
+    const events = engine.apply({ kind: "remove", id: 1, tradedSats: 30, micro: 2 });
+    // The order leaves our book with its full local remainder...
+    expect(events.some((e) => e.kind === "trade" && e.sats === 50)).toBe(true);
+    // ...and the magnitude disagreement is counted, not hidden.
+    expect(engine.anomalies.get("traded-mismatch")).toBe(1);
+    expect(engine.unexpectedAnomalyCount()).toBe(1);
+  });
+
+  it("reconstruction-protocol anomalies stay out of the divergence count", () => {
+    const engine = new Engine("external");
+    engine.apply({ kind: "remove", id: 999, tradedSats: 0, micro: 1 });
+    engine.apply({ kind: "rest", id: 5, side: Side.Bid, tick: 10000, sats: 10, micro: 2 });
+    engine.apply({ kind: "rest", id: 5, side: Side.Bid, tick: 10000, sats: 10, micro: 3 });
+    expect(engine.anomalies.get("remove-unknown-order")).toBe(1);
+    expect(engine.anomalies.get("rest-existing-order")).toBe(1);
+    expect(engine.unexpectedAnomalyCount()).toBe(0);
   });
 
   it("re-applying a rest for a known order is idempotent and keeps queue position", () => {

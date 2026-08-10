@@ -173,6 +173,7 @@ export type RejectReason =
   | "duplicate-id"
   | "unknown-order"
   | "bad-quantity"
+  | "bad-price"
   | "post-only-cross"
   | "fok-unfillable"
   | "market-post-only";
@@ -191,13 +192,27 @@ export interface SeededEvent {
  * The venue asserted something our book disagrees with (live mode only) —
  * e.g. a fill against an order that is not at its queue's front. The venue is
  * right and we apply it; the anomaly is counted and surfaced, never hidden.
+ *
+ * Two classes. EXPECTED anomalies are normal artifacts of the reconstruction
+ * protocol (events about orders that predate our snapshot, snapshot/buffer
+ * overlap) and say nothing about book health. Everything else is genuine
+ * local/venue disagreement and feeds the divergence metric.
  */
 export type AnomalyKind =
   | "consume-not-front"
   | "reduce-unknown-order"
   | "remove-unknown-order"
   | "rest-existing-order"
-  | "grew-in-place";
+  | "grew-in-place"
+  | "side-changed"
+  | "traded-mismatch"
+  | "seed-duplicate-id"
+  | "invalid-external-value";
+export const EXPECTED_ANOMALIES: ReadonlySet<AnomalyKind> = new Set([
+  "rest-existing-order",
+  "reduce-unknown-order",
+  "remove-unknown-order",
+] satisfies AnomalyKind[]);
 export interface AnomalyEvent {
   kind: "anomaly";
   anomaly: AnomalyKind;
