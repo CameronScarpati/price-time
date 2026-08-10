@@ -1,5 +1,8 @@
 # price-time
 
+**[Watch it live → price-time.netlify.app](https://price-time.netlify.app)**
+&nbsp;·&nbsp; [![ci](https://github.com/CameronScarpati/price-time/actions/workflows/ci.yml/badge.svg)](https://github.com/CameronScarpati/price-time/actions/workflows/ci.yml)
+
 **A live matching engine, made visible.** Open the page and you are watching a
 real financial market breathe: every rectangle is one actual resting order on
 Bitstamp's BTC/USD order book — buyers in blue pressing up from below, sellers
@@ -134,4 +137,6 @@ that measurement is one tap away on a real device.
 
 Built by Cameron Scarpati. Market data: [Bitstamp](https://www.bitstamp.net)
 (BTC/USD public WebSocket and REST feeds), attributed on the page and consumed
-directly by your browser — no relay, no key, nothing stored.
+directly by your browser — no relay, no key, nothing stored. Code is
+[MIT-licensed](LICENSE); the market data remains Bitstamp's, under
+[their terms](https://www.bitstamp.net/api/).
