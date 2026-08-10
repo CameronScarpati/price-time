@@ -231,7 +231,12 @@ export class Ui {
 
   // ------------------------------------------------------------------- tape
 
+  private lastTapeStamp = -1;
+
   private renderTape(meta: FrameMeta): void {
+    const stamp = meta.tape.length > 0 ? meta.tape[meta.tape.length - 1].atMs : 0;
+    if (stamp === this.lastTapeStamp) return;
+    this.lastTapeStamp = stamp;
     this.tapeList.innerHTML = "";
     for (let i = meta.tape.length - 1; i >= 0; i--) {
       const t = meta.tape[i];

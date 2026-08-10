@@ -339,6 +339,12 @@ export class Pipeline {
 
   private updateVol(nowMs: number): void {
     if (nowMs - this.lastVolSampleMs < 1000) return;
+    // Keep the calibration windows bounded — these grow at message rate and
+    // the piece is built for long looks.
+    const cutoff = nowMs - 60_000;
+    this.createTimes = this.createTimes.filter((t) => t > cutoff);
+    this.cancelTimes = this.cancelTimes.filter((t) => t > cutoff);
+    this.tradeTimes = this.tradeTimes.filter((t) => t > cutoff);
     const bid = this.engine.bestBid();
     const ask = this.engine.bestAsk();
     if (bid === undefined || ask === undefined) return;

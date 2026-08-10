@@ -57,12 +57,17 @@ always tells you), where synthetic agents drive the same engine.*
 
 Yes — with one honest caveat, disclosed on the page itself. The order flow is
 Bitstamp's public feed; the book, queues, fills and cancels you see are
-reconstructed from it through a local engine, verified continuously against
-the venue's own published book (in a 20-minute audit, the rebuilt top-of-book
-matched the venue exactly — zero ticks of difference — on all 118 samples,
-across 115,790 applied events, with zero sequence gaps). At rare margins a
-local match can differ from the venue's internal one; the piece never claims
-to *be* Bitstamp's engine, only Bitstamp's flow through an honest one.
+reconstructed from it through a local engine and verified continuously against
+the venue's own published book. In a calm 20-minute audit, the rebuilt
+top-of-book matched the venue **exactly — zero ticks of difference — on all
+118 samples** across 115,790 applied events with zero sequence gaps. In a
+60-minute audit run deliberately through a violent selloff, 340 of 346
+samples matched within one tick (98.3%), with zero gaps and a single
+divergence that the watchdog caught and healed by rebuilding the book — which
+is the designed response, since a wrong book is thrown away, never patched
+(raw reports in `docs/perf/`). At rare margins a local match can differ from
+the venue's internal one; the piece never claims to *be* Bitstamp's engine,
+only Bitstamp's flow through an honest one.
 
 When the feed drops — venues go down, tabs go offline — the piece never shows
 a spinner. Synthetic traders seeded from the last real book and calibrated to
