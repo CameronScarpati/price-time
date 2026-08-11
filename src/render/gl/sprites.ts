@@ -50,10 +50,11 @@ void main() {
   vec2 corner;
   vec2 center = aPos;
   if (aKind == 0.0) {
-    // Heat streak: long and low, lying along the consumed row, anchored at
-    // the strike point and reaching into the side that was eaten.
-    corner = (aCorner - 0.5) * vec2(size * 5.0, size * 1.15);
-    center.x += dir * size * 2.1;
+    // Strike: a crisp, compact pulse at the queue front, nudged into the
+    // consumed side. No elongated travel — lingering smears read as motion
+    // blur and made a real viewer's head hurt.
+    corner = (aCorner - 0.5) * vec2(size * 1.7, size * 0.95);
+    center.x += dir * size * 0.55;
   } else {
     float grow = aKind == 2.0 ? (0.4 + aAge * 1.2) : 1.0;
     corner = (aCorner - 0.5) * size * 2.2 * grow;
@@ -83,29 +84,22 @@ void main() {
   float fade = 1.0 - vAge;
   vec3 color; float a;
   if (vKind == 0.0) {
-    // Heat streak: fast attack, long exponential cool-down. Real heat: a
-    // white-hot core at the strike point fringed in side-color at birth,
-    // sinking toward ember (amber → burnt orange, blue → deep sea) as it
-    // cools — same 950ms life, same envelope and position, only the
-    // temperature curve. Overlapping burst streaks sum into sustained glow.
-    float along = clamp(0.5 - vLocal.x * vDir, 0.0, 1.0);   // 1 at strike end
-    float lateral = exp(-vLocal.y * vLocal.y * 14.0);
-    float attack = smoothstep(0.0, 0.06, vAge);
-    float cool = exp(-vAge * 3.2);
-    float body = along * along * lateral;
-    float heat = body * cool;
-    vec3 deepC = vTint > 1.5 ? LIQ * 0.55
-      : mix(vec3(0.05, 0.24, 0.46), vec3(0.55, 0.22, 0.05), vTint);
-    vec3 c = mix(deepC, tint, cool);
-    color = mix(c, vec3(1.0), heat * 0.75);
-    a = body * attack * cool * 0.5;
+    // Strike: white-hot core in the side's hue, sharp attack, brief clean
+    // decay. Crisp by design — no tail, no smear.
+    float r = length(vec2(vLocal.x * 1.15, vLocal.y * 1.9)) * 2.0;
+    float core = smoothstep(0.95, 0.15, r);
+    float attack = smoothstep(0.0, 0.10, vAge);
+    float decay = fade * fade;
+    color = mix(tint, vec3(1.0), core * decay * 0.7);
+    a = core * attack * decay * 0.55;
   } else if (vKind == 1.0) {
     // Cancel ghost: a row-aligned sliver where a quote died — the shape of
-    // the cell that vanished, never a floating out-of-focus blob.
+    // the cell that vanished. Brief and faint: it must never read as an
+    // afterimage, only as the eye's chance to notice the loss.
     float r = length(vec2(vLocal.x, vLocal.y * 3.4)) * 2.0;
     float puff = smoothstep(0.72, 0.10, r);
     color = tint;
-    a = puff * fade * 0.1;
+    a = puff * fade * 0.08;
   } else {
     float r = length(vLocal) * 2.0;
     // Reduced-motion ring: a quiet annulus, no growth spike, long fade.

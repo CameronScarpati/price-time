@@ -297,14 +297,15 @@ drawn as the strike arriving at the queue front — presentation of a real trade
 event whose side is known from the trade print. `is_liquidation` orders get a
 distinct mark (explained in the explainer; rare, worth celebrating).
 
-The frame itself is composed for trance, grounded in the two pieces of prior art
-that hold attention longest: Listen to Wikipedia (event scarcity, long soft
-decays) and Bookmap (persistence — nothing pops, everything flows). Each frame
-washes the previous one toward the background instead of clearing (~100ms
-phosphor afterglow, presentation of decay), cells carry a 0.7px edge feather, a
-faint luminous membrane sits inside the spread gap with the spread's own height,
-and a static vignette holds the room. Reduced motion drops the afterglow
-entirely — discrete stillness, not smear. The synthetic market runs deliberately
+The frame is composed for trance through stillness and calm pacing (the Listen
+to Wikipedia lesson: one soft bell per second beats forty pops). Two persistence
+experiments were shipped and reverted after real-device review: a whole-field
+phosphor wash (read as OLED afterimage smearing) and 950ms trade heat streaks
+(read as motion blur). The standing rule: the field is crisp — hard clear every
+frame — and events are brief crisp strikes; anything that lingers is out. What
+holds the room instead is static: a dithered radial gradient, the warm/cool
+membrane inside the spread gap (its height is the spread itself), cell material
+with a luminous core, and a vignette. The synthetic market runs deliberately
 slower than live's raw message rate (its whole population quotes on screen;
 live scatters churn across thousands of unseen levels), because the simulation's
 job is to be watchable, honestly labeled, not to impersonate a firehose.

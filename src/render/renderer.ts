@@ -190,9 +190,11 @@ export class Renderer {
       // stand CLOSER than the dense standpoint (a skeletal book whose few
       // levels still fill the near band keeps today's exact framing). The
       // touch cap inside the camera still guarantees both bests fit.
+      // Phone close-up eased after hands-on feedback: monumental two-row
+      // bricks read intentional but gave the viewer nothing to explore.
       const close =
         p.layout === 1
-          ? { frac: 0.45, minPpt: 2.2, maxPpt: 22 }
+          ? { frac: 0.55, minPpt: 2.2, maxPpt: 13 }
           : { frac: 0.5, minPpt: 4.5, maxPpt: 32 };
       const nearHalf = Math.max(this.occupiedHalfSpanTicks * 1.1, spreadTicks * 0.8, 6);
       // Mirror of camera.follow's fit — evaluated for both standpoints so
@@ -304,7 +306,7 @@ export class Renderer {
         // (sprites.ts); in the spine layout everything strikes rightward.
         const makerSide = opposite(event.aggressor);
         const dir = p.layout === 1 ? 1 : makerSide === Side.Bid ? -1 : 1;
-        const sizePx = Math.min(8 + Math.sqrt(event.sats * this.pxPerSat) * 1.5, 26);
+        const sizePx = Math.min(8 + Math.sqrt(event.sats * this.pxPerSat) * 1.5, 22);
         this.sprites.push({
           xPx: p.seamX, yPx: y, sizePx: dir * sizePx,
           age01: 0,
@@ -312,7 +314,7 @@ export class Renderer {
           tint: event.liquidation ? 2 : event.aggressor === Side.Bid ? 1 : 0,
           delayMs: reduced ? 0 : Math.min(tradeIndex++ * 45, 220),
           bornMs: nowMs,
-          lifeMs: reduced ? 1600 : 950,
+          lifeMs: reduced ? 1600 : 260,
         });
       } else if (!reduced) {
         const dir = p.layout === 1 ? 1 : event.side === Side.Bid ? -1 : 1;
@@ -326,7 +328,7 @@ export class Renderer {
           age01: 0,
           kind: SpriteKind.Ghost,
           tint: event.side === Side.Bid ? 0 : 1,
-          delayMs: 0, bornMs: nowMs, lifeMs: 220,
+          delayMs: 0, bornMs: nowMs, lifeMs: 150,
         });
       }
     }

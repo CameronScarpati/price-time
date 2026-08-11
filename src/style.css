@@ -19,7 +19,10 @@ html, body {
   #app { height: 100dvh; }
 }
 
-.layer { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* touch-action on BOTH canvas layers: the overlay sits on top, and without
+ * this Safari claims pinches for page zoom before the app ever sees them —
+ * which made phone zoom feel broken. */
+.layer { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
 
 /* --- provenance: the one always-present line ----------------------------- */
 
