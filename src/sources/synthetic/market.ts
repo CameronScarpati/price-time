@@ -319,26 +319,3 @@ export class SyntheticMarket implements FlowSource {
     this.place(sink, side, tick, this.prng.size(this.cal.sizeMedianSats * 0.6, 1), "ioc");
   }
 }
-
-/** In synthetic mode the engine's own matches are the prints; this adapter
- * turns a trade event into the same shape the venue's tape would carry. */
-export function printFromTrade(
-  event: Extract<EngineEvent, { kind: "trade" }>, micro: Micro,
-): { tradeId: number; tick: PriceTick; sats: Sats; aggressor: Side; buyOrderId: OrderId; sellOrderId: OrderId; micro: Micro } {
-  const takerId = event.takerId ?? 0;
-  return {
-    tradeId: event.seq,
-    tick: event.tick,
-    sats: event.sats,
-    aggressor: event.aggressor,
-    buyOrderId: event.aggressor === Side.Bid ? takerId : event.makerId,
-    sellOrderId: event.aggressor === Side.Ask ? takerId : event.makerId,
-    micro,
-  };
-}
-
-/** Aggressor side of a print relative to a maker order — used when joining
- * venue prints to the book (live) or engine trades to the tape (synthetic). */
-export function aggressorOfMaker(makerSide: Side): Side {
-  return opposite(makerSide);
-}

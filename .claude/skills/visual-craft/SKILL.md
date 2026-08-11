@@ -17,10 +17,14 @@ and caused literal headache). Crisp field, brief crisp events.
 
 ## The frame composition (order matters)
 
-hard clear → static dithered room gradient → cells (soft 0.7px edge feather,
-chrome exclusion bands top/bottom) → the membrane (a faint warm/cool band
-inside the spread whose height IS the spread; data-driven) → event sprites
-(crisp, short) → vignette (static).
+backdrop (room gradient + vignette folded into ONE opaque fullscreen pass —
+it replaces the clear; every saved fullscreen pass is battery on a 3x 120Hz
+phone) → cells (soft 0.7px edge feather, chrome exclusion bands top/bottom)
+→ the membrane (warm/cool band inside the spread whose height IS the spread;
+SCISSORED to its band and faded to true zero horizontally — it once ran the
+full spine width and read as a stray beam) → event sprites (crisp, short).
+The rAF loop renders at ≤60fps even on ProMotion: a mostly-still field
+gains nothing from 120Hz that is worth double the fill rate.
 
 ## Timing values in use (tuned, not defaulted)
 
