@@ -31,7 +31,7 @@ await page.mouse.move(720, 430);
 await page.waitForTimeout(800);
 await page.screenshot({ path: `${prefix}-desktop-engaged.png` });
 
-const phone = await browser.newPage({ viewport: { width: 390, height: 844 } });
+const phone = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3 });
 phone.on("console", (m) => { if (m.type() === "error") errors.push("phone: " + m.text()); });
 phone.on("pageerror", (e) => errors.push("phone: " + String(e)));
 await phone.goto(url, { waitUntil: "networkidle" }).catch((e) => errors.push(String(e)));

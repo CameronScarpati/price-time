@@ -27,6 +27,9 @@ export function packFrame(
   // rest. The renderer anchors its length scale on their median, because any
   // global statistic is dragged around by whale quotes and far-tail dust.
   const coreSizes: number[] = [];
+  // Total depth of each top level — the spine (phone) layout scales width by
+  // level totals, not per-order sizes.
+  const coreLevelTotals: number[] = [];
 
   const packSide = (side: Side): void => {
     const book = engine.sideBook(side);
@@ -36,6 +39,7 @@ export function packFrame(
     for (let i = 0; i < n; i++) {
       const tick = side === Side.Bid ? ticks[n - 1 - i] : ticks[i];
       const level = book.levels.get(tick)!;
+      if (i < 15) coreLevelTotals.push(level.totalSats);
       let cumBefore = 0;
       for (let slot = level.head; slot !== NIL; slot = store.next[slot]) {
         if (instances >= FRAME_MAX_INSTANCES) {
@@ -60,6 +64,11 @@ export function packFrame(
   packSide(Side.Ask);
   coreSizes.sort((a, b) => a - b);
   const coreMedianSats = coreSizes.length > 0 ? coreSizes[coreSizes.length >> 1] : 8_000_000;
+  coreLevelTotals.sort((a, b) => a - b);
+  const coreLevelP80 =
+    coreLevelTotals.length > 0
+      ? coreLevelTotals[Math.min(Math.floor(coreLevelTotals.length * 0.8), coreLevelTotals.length - 1)]
+      : 20_000_000;
 
   const bestBid = engine.bestBid();
   const bestAsk = engine.bestAsk();
@@ -75,9 +84,16 @@ export function packFrame(
     const askTicks = engine.asks.ticks;
     const bidAt = bidTicks[Math.max(bidTicks.length - 4, 0)];
     const askAt = askTicks[Math.min(3, askTicks.length - 1)];
-    spanHint = Math.max(mid - bidAt, askAt - mid, bestAsk - bestBid + 8) * 1.15;
+    const spread = bestAsk - bestBid;
+    const toFourth = Math.max(mid - bidAt, askAt - mid, spread + 8);
+    // On a skeletal book the 4th level can sit hundreds of ticks out;
+    // framing it fills the screen with void. Cap the frame at a few spreads
+    // around the touch — the queue there is the piece — and leave the far
+    // constellation to the viewer's own zoom-out.
+    spanHint = Math.min(toFourth, Math.max(spread * 4, 30)) * 1.15;
   }
   f32[Header.SpanHintTicks] = spanHint;
+  f32[Header.CoreLevelP80Sats] = coreLevelP80;
 
   f32[Header.InstanceCount] = instances;
   f32[Header.BestBidTick] = bestBid ?? 0;

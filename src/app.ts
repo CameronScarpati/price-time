@@ -43,11 +43,17 @@ function boot(): void {
   } satisfies MainToWorker);
 
   const resize = (): void => {
-    const dpr = Math.min(devicePixelRatio, 2);
-    renderer.resize(innerWidth, innerHeight, dpr);
+    // Full device resolution up to 3× — capping at 2 made every 3× phone
+    // screen visibly soft. visualViewport tracks iOS URL-bar collapse, which
+    // plain innerHeight misses.
+    const dpr = Math.min(devicePixelRatio, 3);
+    const w = window.visualViewport?.width ?? innerWidth;
+    const h = window.visualViewport?.height ?? innerHeight;
+    renderer.resize(Math.round(w), Math.round(h), dpr);
   };
   resize();
   addEventListener("resize", resize);
+  window.visualViewport?.addEventListener("resize", resize);
 
   document.addEventListener("visibilitychange", () => {
     worker.postMessage({ type: "hidden", hidden: document.hidden } satisfies MainToWorker);

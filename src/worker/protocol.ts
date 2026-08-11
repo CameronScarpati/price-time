@@ -40,6 +40,10 @@ export const Header = {
    * per side in frame. Books are gappy — a fixed tick span frames nothing on
    * a thin day and a wall on a dense one. */
   SpanHintTicks: 7,
+  /** 80th-percentile LEVEL depth among the top levels — the spine layout's
+   * width scale, so a typical row spans most of a phone screen instead of
+   * every order huddling at the left edge. */
+  CoreLevelP80Sats: 8,
 } as const;
 
 /** A discrete market event the renderer may animate (decay/stagger are the

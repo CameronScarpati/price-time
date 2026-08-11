@@ -132,7 +132,9 @@ export class Renderer {
       gl.clearColor(BG[0], BG[1], BG[2], 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
     } else {
-      this.postFx.fade(BG, 0.16);
+      // 0.22: ~70ms afterglow. Longer trails read as flow on a dense field
+      // but as grime on a sparse one; this holds up on both.
+      this.postFx.fade(BG, 0.22);
     }
     if (frame === null) return;
     if (!frame.consumed) {
@@ -152,18 +154,25 @@ export class Renderer {
     // A phone frames far more of the field, smaller; a desktop sits closer.
     const profile =
       p.layout === 1
-        ? { frac: 0.5, minPpt: 2.2, maxPpt: 8 }
+        ? { frac: 0.62, minPpt: 2.2, maxPpt: 10 }
         : { frac: 0.76, minPpt: 4.5, maxPpt: 14 };
     this.camera.follow(mid, f32[Header.SpanHintTicks], f32[Header.SpreadTicks], cssH, profile);
     this.camera.update(dtMs, nowMs, reduced);
 
-    // Length scale: the median top-level order reads ~26px on desktop and
-    // ~15px on a phone, so the visible core is legible, dust min-clamps, and
-    // whales overflow honestly; eased so a shifting distribution rescales
-    // gently (scale is presentation).
-    const coreMedian = Math.max(frame.meta.stats.coreMedianSats, 50_000);
-    const targetLen = p.layout === 1 ? 15 : 26;
-    this.pxPerSat += (targetLen / coreMedian - this.pxPerSat) * (1 - Math.exp(-dtMs / 900));
+    // Length scale, eased so a shifting distribution rescales gently (scale
+    // is presentation). Desktop: the median top-level ORDER reads ~26px —
+    // queue segments are the star. Spine (phone): width is scarce, so scale
+    // by LEVEL depth instead — a typical top row spans ~62% of the screen;
+    // scaling by order size there left every row huddled at the left edge.
+    let targetPxPerSat: number;
+    if (p.layout === 1) {
+      const p80Level = Math.max(f32[Header.CoreLevelP80Sats], 200_000);
+      targetPxPerSat = (cssW * 0.62) / p80Level;
+    } else {
+      const coreMedian = Math.max(frame.meta.stats.coreMedianSats, 50_000);
+      targetPxPerSat = 26 / coreMedian;
+    }
+    this.pxPerSat += (targetPxPerSat - this.pxPerSat) * (1 - Math.exp(-dtMs / 900));
 
     p.centerTick = this.camera.centerTick;
     p.pxPerTick = this.camera.pxPerTick;

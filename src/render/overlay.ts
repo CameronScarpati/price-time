@@ -51,19 +51,21 @@ export class Overlay {
         ctx.textAlign = "center";
         ctx.fillText(label, p.seamX, y - 2);
       } else {
-        ctx.textAlign = "left";
-        ctx.fillText(label, 6, y - 2);
+        // Spine rows grow from the left, so words live on the right edge —
+        // labels over the cells read as strikethroughs.
+        ctx.textAlign = "right";
+        ctx.fillText(label, p.viewW - 6, y - 2);
       }
     }
 
     // The gap readout: the mid and the living spread.
     const midY = tickToY((bestBid + bestAsk) / 2, p);
     const spread = bestAsk - bestBid;
-    ctx.textAlign = p.layout === 0 ? "center" : "left";
+    ctx.textAlign = p.layout === 0 ? "center" : "right";
     ctx.textBaseline = "middle";
     ctx.font = "12px ui-monospace, SFMono-Regular, Menlo, monospace";
     ctx.fillStyle = "rgba(226, 232, 240, 0.9)";
-    const x = p.layout === 0 ? p.seamX : 8;
+    const x = p.layout === 0 ? p.seamX : p.viewW - 6;
     ctx.fillText(
       `${formatDecimal(Math.round((bestBid + bestAsk) / 2), priceDecimals)}  ·  spread ${formatDecimal(spread, priceDecimals)}`,
       x, midY,
