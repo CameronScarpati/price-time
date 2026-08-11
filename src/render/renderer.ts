@@ -1,10 +1,13 @@
-import { Side } from "../engine/types";
+import { Side, opposite } from "../engine/types";
 import { FRAME_BYTES, Header, type FrameMeta, type MainToWorker, type WorkerToMain } from "../worker/protocol";
 import { Camera } from "./camera";
 import { CellPipeline } from "./gl/cells";
+import { PostPipeline } from "./gl/post";
 import { SpriteKind, SpritePipeline, type Sprite } from "./gl/sprites";
 import { tickToY, type LayoutParams } from "./layout";
 import { Overlay } from "./overlay";
+
+const BG: [number, number, number] = [0.039, 0.055, 0.07];
 
 /**
  * The main-thread renderer: draws the worker's latest frame, owns every
@@ -33,6 +36,7 @@ export class Renderer {
   private readonly gl: WebGL2RenderingContext;
   private readonly cells: CellPipeline;
   private readonly spritesGl: SpritePipeline;
+  private readonly postFx: PostPipeline;
   private readonly overlay: Overlay;
   readonly camera = new Camera();
 
@@ -58,11 +62,17 @@ export class Renderer {
     private readonly worker: Worker,
     private readonly delegate: RendererDelegate,
   ) {
-    const gl = canvas.getContext("webgl2", { antialias: false, alpha: false });
+    // preserveDrawingBuffer carries the previous frame into this one, so the
+    // fade pass can wash it toward the background instead of clearing —
+    // ~100ms of phosphor afterglow on everything that moves.
+    const gl = canvas.getContext("webgl2", {
+      antialias: false, alpha: false, preserveDrawingBuffer: true,
+    });
     if (gl === null) throw new Error("WebGL2 unavailable");
     this.gl = gl;
     this.cells = new CellPipeline(gl);
     this.spritesGl = new SpritePipeline(gl);
+    this.postFx = new PostPipeline(gl);
     this.overlay = new Overlay(overlayCanvas);
     this.layoutParams = {
       viewW: 0, viewH: 0, centerTick: 0, pxPerTick: 8,
@@ -116,11 +126,15 @@ export class Renderer {
 
     const frame = this.latest;
     const gl = this.gl;
-    gl.clearColor(0.039, 0.055, 0.07, 1); // deep ink, not pure black
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    if (frame === null) return;
-
     const reduced = this.delegate.reducedMotion();
+    if (reduced) {
+      // Reduced motion gets no afterglow: discrete stillness, not smear.
+      gl.clearColor(BG[0], BG[1], BG[2], 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+    } else {
+      this.postFx.fade(BG, 0.16);
+    }
+    if (frame === null) return;
     if (!frame.consumed) {
       frame.consumed = true;
       this.consumeMeta(frame, nowMs, reduced);
@@ -133,20 +147,27 @@ export class Renderer {
     const cssW = this.layoutParams.viewW;
     const cssH = this.layoutParams.viewH;
 
-    this.camera.follow(mid, f32[Header.SpanHintTicks], f32[Header.SpreadTicks], cssH);
+    const p = this.layoutParams;
+    p.layout = cssW / cssH < 0.8 ? 1 : 0;
+    // A phone frames far more of the field, smaller; a desktop sits closer.
+    const profile =
+      p.layout === 1
+        ? { frac: 0.5, minPpt: 2.2, maxPpt: 8 }
+        : { frac: 0.76, minPpt: 4.5, maxPpt: 14 };
+    this.camera.follow(mid, f32[Header.SpanHintTicks], f32[Header.SpreadTicks], cssH, profile);
     this.camera.update(dtMs, nowMs, reduced);
 
-    // Length scale: the median top-level order reads ~26px, so the visible
-    // core is legible, dust min-clamps, and whales overflow honestly; eased
-    // so a shifting distribution rescales gently (scale is presentation).
+    // Length scale: the median top-level order reads ~26px on desktop and
+    // ~15px on a phone, so the visible core is legible, dust min-clamps, and
+    // whales overflow honestly; eased so a shifting distribution rescales
+    // gently (scale is presentation).
     const coreMedian = Math.max(frame.meta.stats.coreMedianSats, 50_000);
-    this.pxPerSat += (26 / coreMedian - this.pxPerSat) * (1 - Math.exp(-dtMs / 900));
+    const targetLen = p.layout === 1 ? 15 : 26;
+    this.pxPerSat += (targetLen / coreMedian - this.pxPerSat) * (1 - Math.exp(-dtMs / 900));
 
-    const p = this.layoutParams;
     p.centerTick = this.camera.centerTick;
     p.pxPerTick = this.camera.pxPerTick;
     p.pxPerSat = this.pxPerSat;
-    p.layout = cssW / cssH < 0.8 ? 1 : 0;
     p.seamX = p.layout === 0 ? cssW * 0.5 : 10;
 
     let dim = 0;
@@ -163,8 +184,20 @@ export class Renderer {
       reduced,
     });
 
+    // The membrane: a faint luminous band whose height IS the spread —
+    // breathing made barely visible. Skipped when the touch is off-frame.
+    if (this.bestBid > 0 && this.bestAsk > 0 && !reduced) {
+      const midY = tickToY((this.bestBid + this.bestAsk) / 2, p);
+      if (midY > -50 && midY < cssH + 50) {
+        const halfH = Math.max((f32[Header.SpreadTicks] * p.pxPerTick) / 2, 3);
+        this.postFx.membrane(cssW, cssH, midY, Math.min(halfH, cssH * 0.3),
+          p.layout === 0 ? p.seamX : cssW * 0.5, 0.05);
+      }
+    }
+
     this.advanceSprites(nowMs);
     this.spritesGl.draw(this.sprites, cssW, cssH);
+    this.postFx.vignette(0.22);
     this.overlay.draw(p, this.bestBid, this.bestAsk, 2, this.delegate.chromeAlpha());
   }
 
@@ -181,19 +214,22 @@ export class Renderer {
       const y = tickToY(event.tick, p);
       if (y < -40 || y > p.viewH + 40) continue;
       if (event.kind === "trade") {
-        const front = p.seamX;
-        // A strike, not a bloom: tight, row-hugging, brief. Radius grows with
-        // the square root of quantity so glow AREA tracks size — a linear
-        // radius would overstate big trades.
-        const sizePx = Math.min(7 + Math.sqrt(event.sats * this.pxPerSat) * 1.6, 30);
+        // A heat streak reaching into the consumed side, slow to cool: rapid
+        // trades pool into sustained warmth instead of strobing. Size grows
+        // with the square root of quantity so glow AREA tracks size — a
+        // linear radius would overstate big trades. Direction rides the sign
+        // (sprites.ts); in the spine layout everything strikes rightward.
+        const makerSide = opposite(event.aggressor);
+        const dir = p.layout === 1 ? 1 : makerSide === Side.Bid ? -1 : 1;
+        const sizePx = Math.min(8 + Math.sqrt(event.sats * this.pxPerSat) * 1.5, 26);
         this.sprites.push({
-          xPx: front, yPx: y, sizePx,
+          xPx: p.seamX, yPx: y, sizePx: dir * sizePx,
           age01: 0,
           kind: reduced ? SpriteKind.Ring : SpriteKind.Flash,
           tint: event.liquidation ? 2 : event.aggressor === Side.Bid ? 1 : 0,
           delayMs: reduced ? 0 : Math.min(tradeIndex++ * 45, 220),
           bornMs: nowMs,
-          lifeMs: reduced ? 1600 : 340,
+          lifeMs: reduced ? 1600 : 950,
         });
       } else if (!reduced) {
         const dir = p.layout === 1 ? 1 : event.side === Side.Bid ? -1 : 1;

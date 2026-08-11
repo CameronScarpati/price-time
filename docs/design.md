@@ -288,13 +288,26 @@ What each visual channel carries (per the brief's encoding findings):
 
 Events: an arriving order materializes at the back of its queue (~120ms fade/scale
 in — presentation of an instantaneous fact). A cancel fades out in place (~100ms).
-A fill flashes at the seam and the consumed cells die instantly, their pixels
-fading ~100ms. A sweep reads as a run of flashes climbing or descending the seam,
-staggered within their frames' decay windows, never merged. In live mode, fully
-filled aggressors never rest, so the aggressor is drawn as an impulse arriving at
-the struck queue front — presentation of a real trade event whose side is known
-from the trade print. `is_liquidation` orders get a distinct mark (explained in the
-explainer; rare, worth celebrating when it appears).
+A fill lays a **heat streak** along the consumed row — fast attack, ~1s
+exponential cool-down, reaching into the eaten side — so rapid trades pool into
+sustained warmth instead of strobing. A sweep reads as a run of streaks climbing
+or descending the seam, staggered within their frames' decay windows, never
+merged. In live mode, fully filled aggressors never rest, so the aggressor is
+drawn as the strike arriving at the queue front — presentation of a real trade
+event whose side is known from the trade print. `is_liquidation` orders get a
+distinct mark (explained in the explainer; rare, worth celebrating).
+
+The frame itself is composed for trance, grounded in the two pieces of prior art
+that hold attention longest: Listen to Wikipedia (event scarcity, long soft
+decays) and Bookmap (persistence — nothing pops, everything flows). Each frame
+washes the previous one toward the background instead of clearing (~100ms
+phosphor afterglow, presentation of decay), cells carry a 0.7px edge feather, a
+faint luminous membrane sits inside the spread gap with the spread's own height,
+and a static vignette holds the room. Reduced motion drops the afterglow
+entirely — discrete stillness, not smear. The synthetic market runs deliberately
+slower than live's raw message rate (its whole population quotes on screen;
+live scatters churn across thousands of unseen levels), because the simulation's
+job is to be watchable, honestly labeled, not to impersonate a firehose.
 
 The camera frames the **populated neighborhood** at rest — out to roughly the 4th
 occupied level each side, clamped so rows never fall below queue legibility — and

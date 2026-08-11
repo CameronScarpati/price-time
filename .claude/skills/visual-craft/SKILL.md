@@ -6,15 +6,31 @@ description: Use when designing or tuning any motion, color, timing, or composit
 # Visual craft
 
 Truth-rules says what may move; this says how to make it excellent. The
-feeling of the piece lives entirely in this surface.
+feeling of the piece lives entirely in this surface. The target feeling is
+HYPNOSIS — zone-out, screensaver gravity — and its two research-backed
+ingredients are: **event scarcity with long soft decays** (Listen to
+Wikipedia is captivating at one bell per second; machine-gun pops kill the
+trance) and **persistence** (Bookmap's "HD movie" quality: nothing pops,
+everything flows and lingers).
+
+## The frame composition (order matters)
+
+fade wash (phosphor persistence, alpha 0.16 toward the background — ~100ms
+afterglow on everything; skipped entirely in reduced motion) → cells (soft
+0.7px edge feather) → the membrane (a faint band inside the spread whose
+height IS the spread, alpha 0.05 — breathing made barely visible; data-
+driven) → event sprites → vignette (0.22, static). Rendering uses
+`preserveDrawingBuffer` for the wash; the wash is presentation (a brief
+decay of what really was there, same rule as any flash decay).
 
 ## Timing values in use (tuned, not defaulted)
 
-- Trade flash: 340ms life, decay `fade²` (hot core cools into the side's hue),
-  ELLIPTICAL and row-hugging (y compressed ~2×) — a strike at the queue front,
-  never a floating orb (round blooms read as UFOs on a real phone; we shipped
-  that mistake once). Radius ∝ √quantity so glow AREA tracks size — linear
-  radius overstates big trades (area perception is compressive). Max ~30px.
+- Trade = a HEAT STREAK, not a flash: 950ms life, fast attack, `exp(−age·3.2)`
+  cool-down, lying along the consumed row and reaching into the eaten side
+  (direction rides the sign of the sprite's size field). Rapid trades
+  overlap into sustained warmth instead of strobing — we shipped round
+  blooms (UFOs) and then fast ellipses (weird at speed) before landing here.
+  Size ∝ √quantity so glow AREA tracks size; max ~26px, peak alpha ~0.42.
 - Burst stagger: i-th trade in a frame starts at `min(i·45ms, 220ms)`. A sweep
   must read as a RUN up the book, never one merged blob. Never stagger so far
   that event order inverts on screen.
@@ -24,7 +40,15 @@ feeling of the piece lives entirely in this surface.
 - Age → luminance: flare `mix(base, white, 0.28·(1−age/8s))`, then ember decay
   ×0.4 over ~10min. Mix toward white, never multiply >1 — multiplying clips
   channels and washes amber into yellow-green (we hit this).
-- Camera spring: `1−exp(−dt/280ms)` — settles in ~1s, never overshoots.
+- Camera spring: `1−exp(−dt/450ms)` — slow on purpose; the camera is part of
+  the trance. Desktop frames the ~4th occupied level (rows 4.5–14px/tick);
+  a phone frames roughly twice the context at ~15px median cells (hands-on:
+  the phone once felt like staring at three bricks).
+- Synthetic pacing is deliberately SLOWER than live's raw message rate
+  (makers 9/s, noise 5/s across ~16-tick depth with ~11s lifetimes, takers
+  0.22/s): live scatters its churn across thousands of offscreen levels
+  while the understudy quotes inside the frame, so matching rates 1:1 reads
+  frantic where live reads alive.
 - Mode cross-fade: 600ms sine luminance dip; label changes before the dip.
 - Chrome: fades in over ~200ms on engagement, out after 4s idle.
 

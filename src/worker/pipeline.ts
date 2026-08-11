@@ -365,13 +365,16 @@ export class Pipeline {
     const trades = inWindow(this.tradeTimes);
     if (creates < 1) return QUIET_BTCUSD;
     const median = this.sizeQuantile(0.5);
+    // Scaled well below the live message rate: live spreads its churn across
+    // thousands of mostly-offscreen levels, while the understudy quotes
+    // inside the frame — a 1:1 rate reads frantic where live reads alive.
     return {
-      makerWakesPerSec: Math.max(creates * 0.6, 4),
-      noisePerSec: Math.max(creates * 0.35, 2),
-      takersPerSec: Math.max(trades, 0.05),
+      makerWakesPerSec: Math.min(Math.max(creates * 0.25, 3), 14),
+      noisePerSec: Math.min(Math.max(creates * 0.15, 2), 8),
+      takersPerSec: Math.min(Math.max(trades * 0.8, 0.05), 0.6),
       sizeMedianSats: Math.max(median, 10_000),
       halfSpreadTicks: Math.max(1, Math.round(this.spreadEma / 2)),
-      volTicksPerRootSec: Math.max(0.3, Math.min(this.volEma, 20)),
+      volTicksPerRootSec: Math.max(0.3, Math.min(this.volEma, 6)),
     };
   }
 

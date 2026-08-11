@@ -2,10 +2,16 @@ import { cornerBuffer, createProgram } from "./context";
 
 /**
  * Event sprites: the decays of instantaneous market events. A trade IS an
- * instant; only its afterglow is animated (the brief's rule, verbatim). Three
- * kinds: trade flash (hot, additive), cancel ghost (a cool sigh where a
- * quote died), and the reduced-motion ring (a slow, still marker that
- * replaces the flash when motion must be gentle).
+ * instant; only its afterglow is animated (the brief's rule, verbatim).
+ * Three kinds: trade HEAT STREAK (a warm wash that pools along the consumed
+ * row and cools slowly — rapid trades sum into sustained warmth instead of
+ * strobing), cancel ghost (a cool sigh where a quote died), and the
+ * reduced-motion ring (a slow, still marker replacing the streak when motion
+ * must be gentle).
+ *
+ * Encoding note: a streak's direction (into the consumed side) rides the
+ * SIGN of its size field — negative size points left. It keeps the instance
+ * layout at six floats.
  */
 
 export const SpriteKind = { Flash: 0, Ghost: 1, Ring: 2 } as const;
@@ -37,15 +43,28 @@ out vec2 vLocal;
 out float vAge;
 out float vKind;
 out float vTint;
+out float vDir;
 void main() {
-  float grow = aKind == 2.0 ? (0.4 + aAge * 1.2) : (aKind == 0.0 ? (0.85 + aAge * 0.35) : 1.0);
-  vec2 corner = (aCorner - 0.5) * aSize * 2.2 * grow;
-  vec2 px = aPos + corner;
+  float size = abs(aSize);
+  float dir = aSize < 0.0 ? -1.0 : 1.0;
+  vec2 corner;
+  vec2 center = aPos;
+  if (aKind == 0.0) {
+    // Heat streak: long and low, lying along the consumed row, anchored at
+    // the strike point and reaching into the side that was eaten.
+    corner = (aCorner - 0.5) * vec2(size * 5.0, size * 1.15);
+    center.x += dir * size * 2.1;
+  } else {
+    float grow = aKind == 2.0 ? (0.4 + aAge * 1.2) : 1.0;
+    corner = (aCorner - 0.5) * size * 2.2 * grow;
+  }
+  vec2 px = center + corner;
   gl_Position = vec4(px.x / uViewPx.x * 2.0 - 1.0, 1.0 - px.y / uViewPx.y * 2.0, 0.0, 1.0);
   vLocal = aCorner - 0.5;
   vAge = aAge;
   vKind = aKind;
   vTint = aTint;
+  vDir = dir;
 }`;
 
 const FS = `#version 300 es
@@ -54,6 +73,7 @@ in vec2 vLocal;
 in float vAge;
 in float vKind;
 in float vTint;
+in float vDir;
 out vec4 outColor;
 const vec3 BID = vec3(0.263, 0.686, 0.961);
 const vec3 ASK = vec3(1.0, 0.667, 0.278);
@@ -63,12 +83,16 @@ void main() {
   float fade = 1.0 - vAge;
   vec3 color; float a;
   if (vKind == 0.0) {
-    // Trade flash: a strike at the queue front — elliptical and row-hugging,
-    // not a floating orb. White-hot core cooling into the side's hue.
-    float r = length(vec2(vLocal.x, vLocal.y * 2.1)) * 2.0;
-    float core = smoothstep(1.0, 0.0, r);
-    color = mix(tint, vec3(1.0), core * fade * 0.8);
-    a = core * fade * fade * 0.85;
+    // Heat streak: fast attack, long exponential cool-down. Warmth is
+    // strongest at the strike end and washes out along the row; overlapping
+    // streaks from a burst sum into sustained glow rather than strobing.
+    float along = clamp(0.5 - vLocal.x * vDir, 0.0, 1.0);   // 1 at strike end
+    float lateral = exp(-vLocal.y * vLocal.y * 14.0);
+    float attack = smoothstep(0.0, 0.06, vAge);
+    float cool = exp(-vAge * 3.2);
+    float body = along * along * lateral;
+    color = mix(tint, vec3(1.0), body * cool * 0.35);
+    a = body * attack * cool * 0.42;
   } else if (vKind == 1.0) {
     // Cancel ghost: a faint puff where a quote died — small, brief, cool.
     float r = length(vec2(vLocal.x, vLocal.y * 1.6)) * 2.0;
