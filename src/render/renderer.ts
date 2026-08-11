@@ -209,6 +209,7 @@ export class Renderer {
       }
     }
     this.camera.follow(mid, halfSpan, spreadTicks, cssH, profile);
+    this.camera.setBounds(f32[Header.LoTick], f32[Header.HiTick]);
     this.camera.update(dtMs, nowMs, reduced);
 
     // Length scale, eased so a shifting distribution rescales gently (scale
@@ -259,7 +260,7 @@ export class Renderer {
     });
 
     this.advanceSprites(nowMs);
-    this.spritesGl.draw(this.sprites, cssW, cssH);
+    this.spritesGl.draw(this.sprites, cssW, cssH, this.dpr);
     this.overlay.draw(p, this.bestBid, this.bestAsk, 2, this.delegate.chromeAlpha());
   }
 
@@ -414,7 +415,7 @@ export class Renderer {
   debugFrame(): { header: number[]; sample: number[][] } | null {
     const f = this.latest;
     if (f === null) return null;
-    const header = [...f.f32.slice(0, 8)];
+    const header = [...f.f32.slice(0, FRAME_HEADER_FLOATS)];
     const count = f.f32[Header.InstanceCount];
     const sample: number[][] = [];
     for (let i = 0; i < Math.min(count, 8); i++) {

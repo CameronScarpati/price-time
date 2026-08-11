@@ -88,10 +88,16 @@ void main() {
   // Dust must stay visible: never snap a cell to zero width.
   if (xA == xB) xB = xA + dir / uDpr;
   float x = mix(xA, xB, aCorner.x);
-  float py = (y - rowH * 0.5) + aCorner.y * rowH;
+  // Rows get the same device-grid snap as the vertical separators: an
+  // unsnapped top/bottom edge lands mid-device-pixel and every box reads
+  // faintly soft, worst at 3x where one CSS pixel is three chances to blur.
+  float yT = floor((y - rowH * 0.5) * uDpr + 0.5) / uDpr;
+  float yB = floor((y + rowH * 0.5) * uDpr + 0.5) / uDpr;
+  if (yT == yB) yB = yT + 1.0 / uDpr;
+  float py = mix(yT, yB, aCorner.y);
   gl_Position = vec4(x / uViewPx.x * 2.0 - 1.0, 1.0 - py / uViewPx.y * 2.0, 0.0, 1.0);
   vUv = aCorner;
-  vSizePx = vec2(abs(xB - xA), rowH);
+  vSizePx = vec2(abs(xB - xA), yB - yT);
   vClamped = step(uMaxCellPx, aSats * uPxPerSat);
   vYPx = py;
 
@@ -123,14 +129,20 @@ in float vYPx;
 // and the disclosure must never be overprinted.
 uniform vec2 uBandPx;
 uniform float uViewHPx;
+// highp to match the vertex stage's declaration — ESSL requires a shared
+// uniform to carry the same precision in both stages, and this FS defaults
+// to mediump.
+uniform highp float uDpr;
 out vec4 outColor;
 void main() {
-  // A ~0.7px feather on every edge: soft-edged cells read calm; hard rects
-  // read like a spreadsheet. No alpha floor — the old 0.25 floor terminated
-  // every cell in a quarter-strength ledge that read as a stroke. Sub-pixel
-  // rows are protected by the 1.5px length clamp and still keep ~0.5 weight.
+  // Edge anti-aliasing measured in DEVICE pixels (~0.8), not CSS pixels: a
+  // CSS-pixel feather is dpr× device pixels wide, and on a 3x phone that
+  // 2.4-device-px ramp made every box read faintly blurred. One snapped
+  // device pixel of ramp is the sharpest an edge can be without shimmer.
+  // No alpha floor — the old 0.25 floor terminated every cell in a quarter-
+  // strength ledge that read as a stroke.
   vec2 edgePx = min(vUv, 1.0 - vUv) * vSizePx;
-  float feather = clamp(min(edgePx.x, edgePx.y) / 0.7, 0.0, 1.0);
+  float feather = clamp(min(edgePx.x, edgePx.y) * uDpr / 0.8, 0.0, 1.0);
   // Luminous core: bright spine, darker skin — resting liquidity as lit
   // material, not flat paint. Mix toward white for the core, multiply DOWN
   // for the skin (never multiply >1 — clips amber to yellow-green). Rows

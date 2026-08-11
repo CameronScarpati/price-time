@@ -97,6 +97,14 @@ third hue without a domain meaning and an explainer entry.
   phone visibly soft.
 - Panning detaches the camera until the viewer recenters (chip, double-tap,
   Home). Never silently drag the viewer back mid-exploration.
+- Travel is bounded by the book: the viewer may wander 15% of a screen past
+  the last resting order and no further — beyond that is void in every
+  direction (and below the deepest bid, soon negative price space). A fling
+  into the boundary eases onto it; when the whole extent fits the frame the
+  view pins to the book's middle.
+- Edges are anti-aliased in DEVICE pixels (~0.8) and snapped to the device
+  grid on all four sides. A CSS-pixel feather is dpr× device pixels of blur
+  — on a 3x phone it made every box read faintly soft (owner-verified).
 - Desktop = seam (two-sided, fronts meeting at the price axis); phone = spine
   (full-width rows, front at left). Same cells, two layouts — change both or
   neither, and keep `layout.ts` (CPU) in lockstep with `cells.ts` (shader).

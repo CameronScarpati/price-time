@@ -95,6 +95,16 @@ export function packFrame(
   f32[Header.SpanHintTicks] = spanHint;
   f32[Header.CoreLevelP80Sats] = coreLevelP80;
 
+  // Book extent for the camera's pan clamp. Both sides' tick arrays are
+  // sorted ascending, so the ends are O(1): deepest bid (or the whole book's
+  // low) first, farthest ask (or high) last.
+  const bt = engine.bids.ticks;
+  const at = engine.asks.ticks;
+  const lows = [bt[0], at[0]].filter((t) => t !== undefined);
+  const highs = [bt[bt.length - 1], at[at.length - 1]].filter((t) => t !== undefined);
+  f32[Header.LoTick] = lows.length > 0 ? Math.min(...lows) : 0;
+  f32[Header.HiTick] = highs.length > 0 ? Math.max(...highs) : 0;
+
   f32[Header.InstanceCount] = instances;
   f32[Header.BestBidTick] = bestBid ?? 0;
   f32[Header.BestAskTick] = bestAsk ?? 0;

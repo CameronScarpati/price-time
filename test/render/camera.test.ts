@@ -57,7 +57,7 @@ describe("camera released-pan glide", () => {
   });
 });
 
-describe("camera scale ownership", () => {
+describe("camera scale ownership and book bounds", () => {
   it("holds a hand-set zoom against changing auto framing", () => {
     const cam = primed();
     cam.wheelZoom(600); // zoom well out
@@ -98,6 +98,40 @@ describe("camera scale ownership", () => {
       cam.update(16, now, false);
     }
     expect(Math.abs(cam.pxPerTick / settled - 1)).toBeLessThan(0.02);
+  });
+
+  it("clamps panning a little past the deepest order, no further", () => {
+    const cam = primed();
+    cam.setBounds(9_900, 10_100);
+    cam.panTicks(-1e6);
+    // Bottom edge stops 15% of a screen past the deepest order.
+    const half = 400 / cam.pxPerTick;
+    const slack = 120 / cam.pxPerTick;
+    expect(cam.centerTick).toBeCloseTo(9_900 - slack + half, 6);
+    cam.panTicks(1e6);
+    expect(cam.centerTick).toBeCloseTo(10_100 + slack - half, 6);
+  });
+
+  it("a fling into the boundary eases onto it and stops", () => {
+    const cam = primed();
+    cam.setBounds(9_900, 10_100);
+    cam.panTicks(-40);
+    cam.fling(-3); // a hard downward flick, far past the extent
+    runFrames(cam, 60);
+    const lo = 9_900 - 120 / cam.pxPerTick + 400 / cam.pxPerTick;
+    expect(Math.abs(cam.centerTick - lo)).toBeLessThan(1);
+    const rest = cam.centerTick;
+    runFrames(cam, 20);
+    expect(cam.centerTick).toBe(rest);
+  });
+
+  it("pins to the book middle when the whole extent fits the frame", () => {
+    const cam = primed();
+    cam.setBounds(9_950, 10_050);
+    cam.wheelZoom(4000); // far out: view span dwarfs the book extent
+    runFrames(cam, 120);
+    cam.panTicks(500);
+    expect(cam.centerTick).toBe(10_000);
   });
 
   it("recenter restores auto framing after a hand-set zoom", () => {
