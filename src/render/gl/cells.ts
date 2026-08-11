@@ -36,6 +36,8 @@ uniform float uDim;         // mode-transition luminance dip, 0..1
 uniform float uReduced;     // prefers-reduced-motion
 
 out vec4 vColor;
+out vec2 vUv;
+out vec2 vSizePx;
 
 const vec3 BID = vec3(0.263, 0.686, 0.961);  // blue — never red/green
 const vec3 ASK = vec3(1.0, 0.667, 0.278);    // amber
@@ -69,6 +71,8 @@ void main() {
   float x = mix(xA, xB, aCorner.x);
   float py = (y - rowH * 0.5) + aCorner.y * rowH;
   gl_Position = vec4(x / uViewPx.x * 2.0 - 1.0, 1.0 - py / uViewPx.y * 2.0, 0.0, 1.0);
+  vUv = aCorner;
+  vSizePx = vec2(abs(xB - xA), rowH);
 
   vec3 base = aFlags > 0.5 ? LIQ : mix(BID, ASK, aSide);
   // Waiting made visible: arrive bright, settle by ~8s, dim to ember by ~10min.
@@ -85,8 +89,16 @@ void main() {
 const FS = `#version 300 es
 precision mediump float;
 in vec4 vColor;
+in vec2 vUv;
+in vec2 vSizePx;
 out vec4 outColor;
-void main() { outColor = vColor; }`;
+void main() {
+  // A ~0.7px feather on every edge: soft-edged cells read calm; hard rects
+  // read like a spreadsheet. Sub-pixel cells keep full weight.
+  vec2 edgePx = min(vUv, 1.0 - vUv) * vSizePx;
+  float feather = clamp(min(edgePx.x, edgePx.y) / 0.7, 0.25, 1.0);
+  outColor = vec4(vColor.rgb, vColor.a * feather);
+}`;
 
 export interface CellUniforms {
   viewW: number;

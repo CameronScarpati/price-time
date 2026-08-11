@@ -26,14 +26,17 @@ export class Camera {
   follow(
     midTick: number, halfSpanTicks: number, spreadTicks: number,
     viewH: number,
+    profile: { frac: number; minPpt: number; maxPpt: number },
   ): void {
     if (midTick === 0) return;
     this.targetCenter = midTick;
-    // Fit the populated neighborhood (worker's span hint) into ~76% of
-    // height, prefer rows above ~4.5px/tick for queue legibility — but cap
-    // so the touch (both bests plus margin) always fits the frame.
+    // Fit the populated neighborhood (worker's span hint) into a fraction of
+    // the height, prefer legible rows — but cap so the touch (both bests
+    // plus margin) always fits the frame. The profile differs by viewport:
+    // a phone frames far more context, smaller (hands-on feedback: default
+    // phone framing once felt like staring at three bricks).
     const span = Math.max(halfSpanTicks * 2, 24);
-    let ppt = Math.min(Math.max((viewH * 0.76) / span, 4.5), 14);
+    let ppt = Math.min(Math.max((viewH * profile.frac) / span, profile.minPpt), profile.maxPpt);
     const touchCap = (viewH * 0.55) / Math.max(spreadTicks + 12, 12);
     ppt = Math.max(Math.min(ppt, touchCap), 0.05);
     this.autoPxPerTick = ppt;
@@ -57,7 +60,8 @@ export class Camera {
       }
       return;
     }
-    const k = 1 - Math.exp(-dtMs / 280);
+    // Slower than a UI spring on purpose: the camera is part of the trance.
+    const k = 1 - Math.exp(-dtMs / 450);
     if (!this.detached) this.centerTick += (this.targetCenter - this.centerTick) * k;
     this.pxPerTick += (targetPxPerTick - this.pxPerTick) * k;
   }

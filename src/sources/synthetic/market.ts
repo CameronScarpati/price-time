@@ -35,15 +35,19 @@ export interface SyntheticCalibration {
   volTicksPerRootSec: number;
 }
 
-/** Defaults calibrated to the quiet-market BTC/USD texture measured on
- * 2026-08-08 (~44 creates/s, ~0.14 trades/s, $0.01–0.02 spread). */
+/** Default synthetic pacing. Deliberately SLOWER than the live message rate:
+ * live spreads its ~40 events/s across thousands of mostly-offscreen levels,
+ * while the synthetic population quotes almost entirely inside the frame —
+ * matching raw rates made the simulation feel frantic where live feels
+ * alive. The trance lives at a few visible events per second (the Listen-
+ * to-Wikipedia lesson: scarcity plus long decays, not machine-gun pops). */
 export const QUIET_BTCUSD: SyntheticCalibration = {
-  makerWakesPerSec: 26,
-  noisePerSec: 14,
-  takersPerSec: 0.5,
+  makerWakesPerSec: 9,
+  noisePerSec: 5,
+  takersPerSec: 0.22,
   sizeMedianSats: 8_000_000,
-  halfSpreadTicks: 1,
-  volTicksPerRootSec: 1.2,
+  halfSpreadTicks: 2,
+  volTicksPerRootSec: 0.7,
 };
 
 interface MakerState {
@@ -160,7 +164,7 @@ export class SyntheticMarket implements FlowSource {
         // Trading excites more trading — the Hawkes flavor behind volume
         // clustering and sweeps arriving in bunches. Kept subcritical: the
         // bump must not sustain the rate it creates, or trading runs away.
-        this.excitation = Math.min(this.excitation + 1, 10);
+        this.excitation = Math.min(this.excitation + 0.8, 6);
       } else if (event.kind === "canceled" || event.kind === "rejected") {
         this.resting.delete(event.id);
         this.makerByOrder.delete(event.id);
@@ -218,9 +222,9 @@ export class SyntheticMarket implements FlowSource {
     this.momentum = this.momentum * Math.exp(-dtSec / 20) + gaussian * Math.sqrt(dtSec);
     // Rare news-like repricing: the fair value jumps, stale quotes get run
     // over, takers pile in — the adverse-selection scene, on nature's cue.
-    if (this.prng.chance(dtSec * 0.01)) {
+    if (this.prng.chance(dtSec * 0.006)) {
       this.fairTick += (this.prng.chance(0.5) ? 1 : -1) * this.prng.int(8, 30);
-      this.excitation = Math.min(this.excitation + 4, 10);
+      this.excitation = Math.min(this.excitation + 3, 6);
     }
   }
 
@@ -274,16 +278,19 @@ export class SyntheticMarket implements FlowSource {
     else maker.askId = id;
   }
 
-  /** Noise: rest at depth, die young — the churn that dominates real books. */
+  /** Noise: rest at depth, die young-ish — the churn that fills real books.
+   * Spread across more depth and living longer than real median lifetimes:
+   * the simulation's whole population is on screen, so per-level flicker
+   * must stay gentle for the field to read as breathing, not boiling. */
   private noiseWake(sink: SourceSink): void {
     const side = this.prng.chance(0.5) ? Side.Bid : Side.Ask;
-    const depth = 1 + Math.floor(this.prng.exponential(1 / 6));
+    const depth = 1 + Math.floor(this.prng.exponential(1 / 16));
     const tick =
       side === Side.Bid
         ? Math.floor(this.fairTick - this.cal.halfSpreadTicks - depth)
         : Math.ceil(this.fairTick + this.cal.halfSpreadTicks + depth);
     const id = this.place(sink, side, tick, this.prng.size(this.cal.sizeMedianSats, 1.2), "gtc", true);
-    const lifetimeSec = this.prng.exponential(1 / 4);
+    const lifetimeSec = this.prng.exponential(1 / 11);
     this.schedulePendingCancel({ micro: this.nowMicro + lifetimeSec * 1e6, id });
   }
 
