@@ -53,13 +53,23 @@ export class Camera {
     }
   }
 
-  /** Advance the spring by `dtMs`. In reduced motion, snap on a slow cadence
+  /** Advance the camera by `dtMs`. In reduced motion, snap on a slow cadence
    * instead of easing — discrete stillness, not a smeared glide. */
   update(dtMs: number, nowMs: number, reduced: boolean): void {
     if (!this.initialized) return;
     const targetPxPerTick = this.autoPxPerTick * this.zoom;
+
+    // Target velocity (EMA), for feed-forward. Clamped so a reseed's price
+    // jump can't launch the camera; the transition/spring handles jumps.
+    const rawVel = (this.targetCenter - this.prevTarget) / Math.max(dtMs, 1);
+    this.prevTarget = this.targetCenter;
+    const velCap = 1.5 / Math.max(this.pxPerTick, 0.01);
+    this.targetVelTicksPerMs =
+      this.targetVelTicksPerMs * 0.85 + Math.min(Math.max(rawVel, -velCap), velCap) * 0.15;
+
     if (reduced) {
       this.flingTicksPerMs = 0;
+      this.transitionStartMs = 0;
       if (nowMs - this.lastSnapMs > 1000) {
         if (!this.detached) this.centerTick = this.targetCenter;
         this.pxPerTick = targetPxPerTick;
@@ -67,6 +77,26 @@ export class Camera {
       }
       return;
     }
+
+    // A recenter is a finite, designed transition — smootherstep over 650ms
+    // that lands ON the (still-moving) target and ends, rather than an
+    // asymptotic spring that covers the distance fast and then audibly
+    // crawls the last forty pixels. Center and zoom travel together, so the
+    // return never reads as a skip between two mismatched motions.
+    if (this.transitionStartMs > 0) {
+      const t = (nowMs - this.transitionStartMs) / 650;
+      if (t >= 1) {
+        this.transitionStartMs = 0;
+        this.centerTick = this.targetCenter;
+        this.pxPerTick = targetPxPerTick;
+      } else {
+        const e = t * t * t * (t * (6 * t - 15) + 10);
+        this.centerTick = this.transitionFromCenter + (this.targetCenter - this.transitionFromCenter) * e;
+        this.pxPerTick = this.transitionFromPpt + (targetPxPerTick - this.transitionFromPpt) * e;
+      }
+      return;
+    }
+
     // Fling momentum: a released pan glides out with native-feeling friction
     // instead of stopping dead the frame the finger lifts.
     if (this.flingTicksPerMs !== 0) {
@@ -74,18 +104,29 @@ export class Camera {
       this.flingTicksPerMs *= Math.exp(-dtMs / 260);
       if (Math.abs(this.flingTicksPerMs * this.pxPerTick) < 0.02) this.flingTicksPerMs = 0;
     }
-    // The follow spring is slow at rest (the camera is part of the trance)
-    // but tightens as the pixel error grows: zoomed to single orders, a
-    // quote-to-quote jump is hundreds of pixels, and a dreamy spring there
-    // reads as the view sliding long after the market stopped.
-    const errPx = Math.abs(this.targetCenter - this.centerTick) * this.pxPerTick;
-    const tau = Math.min(Math.max(450 - (errPx - 40) * 1.6, 140), 450);
-    const k = 1 - Math.exp(-dtMs / tau);
-    if (!this.detached) this.centerTick += (this.targetCenter - this.centerTick) * k;
+
+    if (!this.detached) {
+      // Feed-forward: move WITH the market's current drift, then let the
+      // spring correct only the residual. A bare spring trails a moving
+      // target by (speed × its time constant) — the "camera towed behind a
+      // running market" feel — and feed-forward removes exactly that lag.
+      this.centerTick += this.targetVelTicksPerMs * dtMs;
+      // The residual spring stays slow at rest (the trance) and tightens as
+      // pixel error grows, so quote-to-quote jumps at single-order zoom
+      // snap into frame.
+      const errPx = Math.abs(this.targetCenter - this.centerTick) * this.pxPerTick;
+      const tau = Math.min(Math.max(450 - (errPx - 20) * 1.8, 120), 450);
+      this.centerTick += (this.targetCenter - this.centerTick) * (1 - Math.exp(-dtMs / tau));
+    }
     this.pxPerTick += (targetPxPerTick - this.pxPerTick) * (1 - Math.exp(-dtMs / 450));
   }
   private lastSnapMs = 0;
   private flingTicksPerMs = 0;
+  private prevTarget = 0;
+  private targetVelTicksPerMs = 0;
+  private transitionStartMs = 0;
+  private transitionFromCenter = 0;
+  private transitionFromPpt = 0;
 
   wheelZoom(deltaY: number): void {
     this.zoom = Math.min(Math.max(this.zoom * Math.exp(-deltaY * 0.0012), 0.0004), 4);
@@ -107,10 +148,13 @@ export class Camera {
     this.flingTicksPerMs = ticksPerMs;
   }
 
-  /** Snap back to the market: re-attach following and reset zoom. */
+  /** Return to the market: a finite designed transition, not a spring. */
   recenter(): void {
     this.detached = false;
     this.zoom = 1;
     this.flingTicksPerMs = 0;
+    this.transitionStartMs = performance.now();
+    this.transitionFromCenter = this.centerTick;
+    this.transitionFromPpt = this.pxPerTick;
   }
 }
