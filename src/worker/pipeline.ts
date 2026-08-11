@@ -538,6 +538,38 @@ export class Pipeline {
     return null;
   }
 
+  /** Re-locate a previously inspected order by id. Null once it has filled,
+   * cancelled, or been swept away in a reseed — the caller closes the box
+   * rather than keep describing an order that is no longer in the book. */
+  inspectById(id: number): InspectionResult | null {
+    const store = this.engine.store;
+    const slot = store.idToSlot.get(id);
+    if (slot === undefined) return null;
+    const side = store.side[slot] as Side;
+    const tick = store.tick[slot];
+    const level = this.engine.sideBook(side).levels.get(tick);
+    if (level === undefined) return null;
+    let cum = 0;
+    let position = 0;
+    for (let s = level.head; s !== NIL; s = store.next[s]) {
+      position++;
+      if (s === slot) {
+        const at = this.restedAtMs.get(id);
+        return {
+          id, side, tick,
+          sats: store.sats[slot],
+          aheadSats: cum,
+          queuePosition: position,
+          queueLength: level.count,
+          ageSec: at === undefined ? 0 : (Date.now() - at) / 1000,
+          liquidation: (store.flags[slot] & 1) !== 0,
+        };
+      }
+      cum += store.sats[s];
+    }
+    return null;
+  }
+
   /** The current book as seed orders (queue order preserved), for handoff. */
   private exportBook(): SeedOrder[] {
     const orders: SeedOrder[] = [];

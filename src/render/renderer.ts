@@ -258,23 +258,6 @@ export class Renderer {
       bandBottomPx: p.layout === 1 ? 58 : 46,
     });
 
-    // The membrane: a faint luminous band whose height IS the spread —
-    // breathing made barely visible. Skipped when the touch is off-frame.
-    // Drawn in reduced motion too: a static band whose height only changes
-    // with data is not motion, and it is the composition's anchor. On the
-    // spine it anchors LEFT, where the rows live — a full-width band once
-    // shot past the bars and read as a stray beam of light.
-    if (this.bestBid > 0 && this.bestAsk > 0) {
-      const midY = tickToY((this.bestBid + this.bestAsk) / 2, p);
-      if (midY > -50 && midY < cssH + 50) {
-        const halfH = Math.max((f32[Header.SpreadTicks] * p.pxPerTick) / 2, 3);
-        const membraneAlpha = p.layout === 1 ? 0.10 : this.skeletal ? 0.11 : 0.09;
-        const falloff = p.layout === 1 ? 1.4 : this.skeletal ? 1.2 : 1.6;
-        this.postFx.membrane(cssW, cssH, midY, Math.min(halfH, cssH * 0.3),
-          p.layout === 0 ? p.seamX : cssW * 0.28, membraneAlpha, falloff, this.dpr);
-      }
-    }
-
     this.advanceSprites(nowMs);
     this.spritesGl.draw(this.sprites, cssW, cssH);
     this.overlay.draw(p, this.bestBid, this.bestAsk, 2, this.delegate.chromeAlpha());

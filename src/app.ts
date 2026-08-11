@@ -76,8 +76,11 @@ function boot(): void {
     lastMoveMs = performance.now();
   });
   window.addEventListener("pointerup", (e) => {
-    if (dragging && Math.abs(velPxPerMs) > 0.08 && performance.now() - lastMoveMs < 80) {
-      renderer.camera.fling(velPxPerMs / renderer.camera.pxPerTick);
+    if (dragging && renderer.camera.detached) {
+      // Stale velocity (finger held still before lifting) means no flick —
+      // release at zero so the glide degrades to a snap onto the row grid.
+      const fresh = performance.now() - lastMoveMs < 80 && Math.abs(velPxPerMs) > 0.08;
+      renderer.camera.fling(fresh ? velPxPerMs / renderer.camera.pxPerTick : 0);
     }
     dragging = false;
     if (e.pointerType === "touch") {

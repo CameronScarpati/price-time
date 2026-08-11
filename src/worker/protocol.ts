@@ -120,7 +120,10 @@ export type MainToWorker =
   | { type: "pause" }
   | { type: "resume" }
   | { type: "hidden"; hidden: boolean }
-  | { type: "inspect"; token: number; side: Side; tick: PriceTick; cumSats: Sats };
+  | { type: "inspect"; token: number; side: Side; tick: PriceTick; cumSats: Sats }
+  /** Re-resolve a previously inspected order by id. A null reply means it
+   * left the book (filled or cancelled) — the inspector's cue to close. */
+  | { type: "watch"; token: number; id: number };
 
 export type WorkerToMain =
   | { type: "frame"; buffer: ArrayBuffer; meta: FrameMeta }

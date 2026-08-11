@@ -301,11 +301,15 @@ The frame is composed for trance through stillness and calm pacing (the Listen
 to Wikipedia lesson: one soft bell per second beats forty pops). Two persistence
 experiments were shipped and reverted after real-device review: a whole-field
 phosphor wash (read as OLED afterimage smearing) and 950ms trade heat streaks
-(read as motion blur). The standing rule: the field is crisp — hard clear every
-frame — and events are brief crisp strikes; anything that lingers is out. What
-holds the room instead is static: a dithered radial gradient, the warm/cool
-membrane inside the spread gap (its height is the spread itself), cell material
-with a luminous core, and a vignette. The synthetic market runs deliberately
+(read as motion blur). A third — a warm/cool luminous membrane inside the
+spread gap — survived longer but went the same way: even scissored and edge-
+faded it read as a stray glow behind the field, and the owner's verdict was no
+glow behind the field at all. The standing rule: the field is crisp — hard
+clear every frame — and events are brief crisp strikes; anything that lingers
+or glows behind the cells is out. What holds the room instead is static: a
+dithered radial gradient, cell material with a luminous core, and a vignette.
+The spread gap needs no fill — the empty band between the bests, breathing
+with the spread, IS the composition's center. The synthetic market runs deliberately
 slower than live's raw message rate (its whole population quotes on screen;
 live scatters churn across thousands of unseen levels), because the simulation's
 job is to be watchable, honestly labeled, not to impersonate a firehose.

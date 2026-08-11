@@ -68,7 +68,7 @@ export class Camera {
       this.targetVelTicksPerMs * 0.85 + Math.min(Math.max(rawVel, -velCap), velCap) * 0.15;
 
     if (reduced) {
-      this.flingTicksPerMs = 0;
+      this.glideDurMs = 0;
       this.transitionStartMs = 0;
       if (nowMs - this.lastSnapMs > 1000) {
         if (!this.detached) this.centerTick = this.targetCenter;
@@ -97,12 +97,20 @@ export class Camera {
       return;
     }
 
-    // Fling momentum: a released pan glides out with native-feeling friction
-    // instead of stopping dead the frame the finger lifts.
-    if (this.flingTicksPerMs !== 0) {
-      this.centerTick += this.flingTicksPerMs * dtMs;
-      this.flingTicksPerMs *= Math.exp(-dtMs / 260);
-      if (Math.abs(this.flingTicksPerMs * this.pxPerTick) < 0.02) this.flingTicksPerMs = 0;
+    // A released pan is a finite GLIDE to a known, grid-snapped endpoint —
+    // ease-out cubic covers the ground fast and LANDS, full stop. The old
+    // exponential friction curve was asymptotic and audibly dragged its feet
+    // for the last half-second (hands-on feedback); a fixed endpoint also
+    // lets the field settle ON the tick grid instead of straddling rows.
+    if (this.glideDurMs > 0) {
+      const t = (nowMs - this.glideStartMs) / this.glideDurMs;
+      if (t >= 1) {
+        this.centerTick = this.glideToCenter;
+        this.glideDurMs = 0;
+      } else {
+        const e = 1 - (1 - t) * (1 - t) * (1 - t);
+        this.centerTick = this.glideFromCenter + (this.glideToCenter - this.glideFromCenter) * e;
+      }
     }
 
     if (!this.detached) {
@@ -121,7 +129,10 @@ export class Camera {
     this.pxPerTick += (targetPxPerTick - this.pxPerTick) * (1 - Math.exp(-dtMs / 450));
   }
   private lastSnapMs = 0;
-  private flingTicksPerMs = 0;
+  private glideStartMs = 0;
+  private glideDurMs = 0;
+  private glideFromCenter = 0;
+  private glideToCenter = 0;
   private prevTarget = 0;
   private targetVelTicksPerMs = 0;
   private transitionStartMs = 0;
@@ -139,20 +150,37 @@ export class Camera {
   panTicks(dTicks: number): void {
     this.centerTick += dTicks;
     this.detached = true;
-    this.flingTicksPerMs = 0;
+    this.glideDurMs = 0;
   }
 
-  /** Release a pan with velocity: the glide-out is presentation. */
+  /** Release a pan: plan a finite glide to where the old friction curve
+   * would have coasted (v·τ, τ=260ms), snapped to whole ticks when rows are
+   * legible. Call on EVERY release — at zero velocity it degrades to a short
+   * settle that aligns the field to the grid. Presentation only. */
   fling(ticksPerMs: number): void {
-    if (!Number.isFinite(ticksPerMs)) return;
-    this.flingTicksPerMs = ticksPerMs;
+    if (!Number.isFinite(ticksPerMs) || !this.initialized) return;
+    let end = this.centerTick + ticksPerMs * 260;
+    // Below ~3px/tick no row grid is discernible — snapping there would just
+    // quantize a smooth glide for nothing.
+    if (this.pxPerTick >= 3) end = Math.round(end);
+    const distPx = Math.abs(end - this.centerTick) * this.pxPerTick;
+    if (distPx < 0.5) {
+      this.centerTick = end;
+      return;
+    }
+    // Duration scales with distance so short nudges stop near-immediately,
+    // capped so a hard flick still resolves in under half a second.
+    this.glideDurMs = Math.min(Math.max(distPx * 1.2, 160), 480);
+    this.glideStartMs = performance.now();
+    this.glideFromCenter = this.centerTick;
+    this.glideToCenter = end;
   }
 
   /** Return to the market: a finite designed transition, not a spring. */
   recenter(): void {
     this.detached = false;
     this.zoom = 1;
-    this.flingTicksPerMs = 0;
+    this.glideDurMs = 0;
     this.transitionStartMs = performance.now();
     this.transitionFromCenter = this.centerTick;
     this.transitionFromPpt = this.pxPerTick;
