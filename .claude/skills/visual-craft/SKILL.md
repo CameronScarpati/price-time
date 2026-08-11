@@ -7,34 +7,33 @@ description: Use when designing or tuning any motion, color, timing, or composit
 
 Truth-rules says what may move; this says how to make it excellent. The
 feeling of the piece lives entirely in this surface. The target feeling is
-HYPNOSIS — zone-out, screensaver gravity — and its two research-backed
-ingredients are: **event scarcity with long soft decays** (Listen to
-Wikipedia is captivating at one bell per second; machine-gun pops kill the
-trance) and **persistence** (Bookmap's "HD movie" quality: nothing pops,
-everything flows and lingers).
+HYPNOSIS — zone-out, screensaver gravity — via **event scarcity with calm
+pacing** (Listen to Wikipedia is captivating at one bell per second;
+machine-gun pops kill the trance) and **a lit, still room** (gradient,
+membrane, vignette). Two hard NOs, both owner-verified on real hardware:
+NO whole-field persistence/afterglow of any kind (reads as OLED smearing),
+and NO lingering event smears (the 950ms heat streaks read as motion blur
+and caused literal headache). Crisp field, brief crisp events.
 
 ## The frame composition (order matters)
 
-fade wash (phosphor persistence, alpha 0.16 toward the background — ~100ms
-afterglow on everything; skipped entirely in reduced motion) → cells (soft
-0.7px edge feather) → the membrane (a faint band inside the spread whose
-height IS the spread, alpha 0.05 — breathing made barely visible; data-
-driven) → event sprites → vignette (0.22, static). Rendering uses
-`preserveDrawingBuffer` for the wash; the wash is presentation (a brief
-decay of what really was there, same rule as any flash decay).
+hard clear → static dithered room gradient → cells (soft 0.7px edge feather,
+chrome exclusion bands top/bottom) → the membrane (a faint warm/cool band
+inside the spread whose height IS the spread; data-driven) → event sprites
+(crisp, short) → vignette (static).
 
 ## Timing values in use (tuned, not defaulted)
 
-- Trade = a HEAT STREAK, not a flash: 950ms life, fast attack, `exp(−age·3.2)`
-  cool-down, lying along the consumed row and reaching into the eaten side
-  (direction rides the sign of the sprite's size field). Rapid trades
-  overlap into sustained warmth instead of strobing — we shipped round
-  blooms (UFOs) and then fast ellipses (weird at speed) before landing here.
-  Size ∝ √quantity so glow AREA tracks size; max ~26px, peak alpha ~0.42.
+- Trade = a crisp STRIKE: a compact white-hot pulse in the side's hue at the
+  queue front, 260ms life, sharp attack, `fade²` decay, no travel and no
+  tail. The journey here: round blooms (UFOs) → fast ellipses (weird at
+  speed) → 950ms heat streaks (read as motion blur and literally made the
+  owner's head hurt). Lingering smears of any kind are OUT — brief crisp
+  flashes only. Size ∝ √quantity so glow AREA tracks size; max ~22px.
 - Burst stagger: i-th trade in a frame starts at `min(i·45ms, 220ms)`. A sweep
   must read as a RUN up the book, never one merged blob. Never stagger so far
   that event order inverts on screen.
-- Cancel puff: 220ms, ≤14px, cool, alpha ≤0.10 — a sigh, not an event. Cancels
+- Cancel sliver: 150ms, row-shaped, alpha ≤0.08 — a sigh, not an event. Cancels
   are 300× more common than trades; at trade-level salience they'd be noise.
 - Arrival ramp: 120ms alpha-in via the age channel in the cell shader.
 - Age → luminance: flare `mix(base, white, 0.28·(1−age/8s))`, then ember decay

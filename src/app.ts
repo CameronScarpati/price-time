@@ -65,7 +65,6 @@ function boot(): void {
   let lastY = 0;
   let pinchDist = 0;
   let lastTapMs = 0;
-  glCanvas.style.touchAction = "none";
   window.addEventListener("pointerdown", (e) => {
     dragging = true;
     lastY = e.clientY;
