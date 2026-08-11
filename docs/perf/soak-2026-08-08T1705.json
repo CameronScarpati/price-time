@@ -1,0 +1,1212 @@
+{
+  "ranAt": "2026-08-08T17:05:51.791Z",
+  "minutes": 20,
+  "commandsApplied": 115790,
+  "samples": 118,
+  "samplesWithinOneTick": 118,
+  "matchRatio": 1,
+  "maxBidDiffTicks": 0,
+  "maxAskDiffTicks": 0,
+  "stats": {
+    "messages": 116115,
+    "trades": 326,
+    "gaps": 0,
+    "reseeds": 0,
+    "reconnects": 0,
+    "divergenceReseeds": 0,
+    "subtypes": {
+      "0": 1502,
+      "1": 2,
+      "2": 10,
+      "4": 7642,
+      "5": 106579,
+      "6": 54
+    }
+  },
+  "anomalies": {
+    "remove-unknown-order": 2
+  },
+  "invariantViolations": [],
+  "detail": [
+    {
+      "atSec": 10,
+      "localBid": 6504949,
+      "localAsk": 6504950,
+      "refBid": 6504949,
+      "refAsk": 6504950,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 21,
+      "localBid": 6503711,
+      "localAsk": 6503712,
+      "refBid": 6503711,
+      "refAsk": 6503712,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 31,
+      "localBid": 6503711,
+      "localAsk": 6503712,
+      "refBid": 6503711,
+      "refAsk": 6503712,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 41,
+      "localBid": 6503711,
+      "localAsk": 6503712,
+      "refBid": 6503711,
+      "refAsk": 6503712,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 52,
+      "localBid": 6503711,
+      "localAsk": 6503712,
+      "refBid": 6503711,
+      "refAsk": 6503712,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 62,
+      "localBid": 6503711,
+      "localAsk": 6503712,
+      "refBid": 6503711,
+      "refAsk": 6503712,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 72,
+      "localBid": 6503711,
+      "localAsk": 6503712,
+      "refBid": 6503711,
+      "refAsk": 6503712,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 83,
+      "localBid": 6503711,
+      "localAsk": 6503712,
+      "refBid": 6503711,
+      "refAsk": 6503712,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 93,
+      "localBid": 6503711,
+      "localAsk": 6503712,
+      "refBid": 6503711,
+      "refAsk": 6503712,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 103,
+      "localBid": 6503711,
+      "localAsk": 6503712,
+      "refBid": 6503711,
+      "refAsk": 6503712,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 113,
+      "localBid": 6503711,
+      "localAsk": 6503712,
+      "refBid": 6503711,
+      "refAsk": 6503712,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 123,
+      "localBid": 6503711,
+      "localAsk": 6503712,
+      "refBid": 6503711,
+      "refAsk": 6503712,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 134,
+      "localBid": 6503711,
+      "localAsk": 6503712,
+      "refBid": 6503711,
+      "refAsk": 6503712,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 144,
+      "localBid": 6503711,
+      "localAsk": 6503712,
+      "refBid": 6503711,
+      "refAsk": 6503712,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 154,
+      "localBid": 6503711,
+      "localAsk": 6503712,
+      "refBid": 6503711,
+      "refAsk": 6503712,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 164,
+      "localBid": 6503711,
+      "localAsk": 6503712,
+      "refBid": 6503711,
+      "refAsk": 6503712,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 175,
+      "localBid": 6503711,
+      "localAsk": 6503712,
+      "refBid": 6503711,
+      "refAsk": 6503712,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 185,
+      "localBid": 6504549,
+      "localAsk": 6504550,
+      "refBid": 6504549,
+      "refAsk": 6504550,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 195,
+      "localBid": 6504874,
+      "localAsk": 6504875,
+      "refBid": 6504874,
+      "refAsk": 6504875,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 205,
+      "localBid": 6504874,
+      "localAsk": 6504875,
+      "refBid": 6504874,
+      "refAsk": 6504875,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 216,
+      "localBid": 6505593,
+      "localAsk": 6505594,
+      "refBid": 6505593,
+      "refAsk": 6505594,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 226,
+      "localBid": 6505593,
+      "localAsk": 6505594,
+      "refBid": 6505593,
+      "refAsk": 6505594,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 236,
+      "localBid": 6505799,
+      "localAsk": 6505800,
+      "refBid": 6505799,
+      "refAsk": 6505800,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 246,
+      "localBid": 6505799,
+      "localAsk": 6505800,
+      "refBid": 6505799,
+      "refAsk": 6505800,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 257,
+      "localBid": 6505799,
+      "localAsk": 6505800,
+      "refBid": 6505799,
+      "refAsk": 6505800,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 267,
+      "localBid": 6505978,
+      "localAsk": 6505979,
+      "refBid": 6505978,
+      "refAsk": 6505979,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 277,
+      "localBid": 6505978,
+      "localAsk": 6505979,
+      "refBid": 6505978,
+      "refAsk": 6505979,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 288,
+      "localBid": 6505978,
+      "localAsk": 6505979,
+      "refBid": 6505978,
+      "refAsk": 6505979,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 298,
+      "localBid": 6505982,
+      "localAsk": 6505983,
+      "refBid": 6505982,
+      "refAsk": 6505983,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 308,
+      "localBid": 6506074,
+      "localAsk": 6506075,
+      "refBid": 6506074,
+      "refAsk": 6506075,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 318,
+      "localBid": 6506074,
+      "localAsk": 6506075,
+      "refBid": 6506074,
+      "refAsk": 6506075,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 328,
+      "localBid": 6506613,
+      "localAsk": 6506614,
+      "refBid": 6506613,
+      "refAsk": 6506614,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 339,
+      "localBid": 6506613,
+      "localAsk": 6506614,
+      "refBid": 6506613,
+      "refAsk": 6506614,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 349,
+      "localBid": 6506613,
+      "localAsk": 6506614,
+      "refBid": 6506613,
+      "refAsk": 6506614,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 359,
+      "localBid": 6506613,
+      "localAsk": 6506614,
+      "refBid": 6506613,
+      "refAsk": 6506614,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 369,
+      "localBid": 6506613,
+      "localAsk": 6506614,
+      "refBid": 6506613,
+      "refAsk": 6506614,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 380,
+      "localBid": 6506273,
+      "localAsk": 6506274,
+      "refBid": 6506273,
+      "refAsk": 6506274,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 390,
+      "localBid": 6506273,
+      "localAsk": 6506274,
+      "refBid": 6506273,
+      "refAsk": 6506274,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 400,
+      "localBid": 6506273,
+      "localAsk": 6506274,
+      "refBid": 6506273,
+      "refAsk": 6506274,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 410,
+      "localBid": 6506273,
+      "localAsk": 6506274,
+      "refBid": 6506273,
+      "refAsk": 6506274,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 421,
+      "localBid": 6506273,
+      "localAsk": 6506274,
+      "refBid": 6506273,
+      "refAsk": 6506274,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 431,
+      "localBid": 6506273,
+      "localAsk": 6506274,
+      "refBid": 6506273,
+      "refAsk": 6506274,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 441,
+      "localBid": 6506273,
+      "localAsk": 6506274,
+      "refBid": 6506273,
+      "refAsk": 6506274,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 452,
+      "localBid": 6506415,
+      "localAsk": 6506416,
+      "refBid": 6506415,
+      "refAsk": 6506416,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 462,
+      "localBid": 6506415,
+      "localAsk": 6506416,
+      "refBid": 6506415,
+      "refAsk": 6506416,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 472,
+      "localBid": 6506415,
+      "localAsk": 6506416,
+      "refBid": 6506415,
+      "refAsk": 6506416,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 482,
+      "localBid": 6506415,
+      "localAsk": 6506416,
+      "refBid": 6506415,
+      "refAsk": 6506416,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 492,
+      "localBid": 6508175,
+      "localAsk": 6508176,
+      "refBid": 6508175,
+      "refAsk": 6508176,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 503,
+      "localBid": 6508175,
+      "localAsk": 6508176,
+      "refBid": 6508175,
+      "refAsk": 6508176,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 513,
+      "localBid": 6508821,
+      "localAsk": 6508822,
+      "refBid": 6508821,
+      "refAsk": 6508822,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 523,
+      "localBid": 6508188,
+      "localAsk": 6508189,
+      "refBid": 6508188,
+      "refAsk": 6508189,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 533,
+      "localBid": 6508188,
+      "localAsk": 6508189,
+      "refBid": 6508188,
+      "refAsk": 6508189,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 543,
+      "localBid": 6508188,
+      "localAsk": 6508189,
+      "refBid": 6508188,
+      "refAsk": 6508189,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 553,
+      "localBid": 6508188,
+      "localAsk": 6508189,
+      "refBid": 6508188,
+      "refAsk": 6508189,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 563,
+      "localBid": 6508188,
+      "localAsk": 6508189,
+      "refBid": 6508188,
+      "refAsk": 6508189,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 574,
+      "localBid": 6508188,
+      "localAsk": 6508189,
+      "refBid": 6508188,
+      "refAsk": 6508189,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 584,
+      "localBid": 6508188,
+      "localAsk": 6508189,
+      "refBid": 6508188,
+      "refAsk": 6508189,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 594,
+      "localBid": 6508188,
+      "localAsk": 6508189,
+      "refBid": 6508188,
+      "refAsk": 6508189,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 604,
+      "localBid": 6508188,
+      "localAsk": 6508189,
+      "refBid": 6508188,
+      "refAsk": 6508189,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 614,
+      "localBid": 6508188,
+      "localAsk": 6508189,
+      "refBid": 6508188,
+      "refAsk": 6508189,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 625,
+      "localBid": 6508188,
+      "localAsk": 6508189,
+      "refBid": 6508188,
+      "refAsk": 6508189,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 635,
+      "localBid": 6508259,
+      "localAsk": 6508260,
+      "refBid": 6508259,
+      "refAsk": 6508260,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 645,
+      "localBid": 6508259,
+      "localAsk": 6508260,
+      "refBid": 6508259,
+      "refAsk": 6508260,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 655,
+      "localBid": 6508259,
+      "localAsk": 6508260,
+      "refBid": 6508259,
+      "refAsk": 6508260,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 665,
+      "localBid": 6508259,
+      "localAsk": 6508260,
+      "refBid": 6508259,
+      "refAsk": 6508260,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 676,
+      "localBid": 6508259,
+      "localAsk": 6508260,
+      "refBid": 6508259,
+      "refAsk": 6508260,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 686,
+      "localBid": 6507139,
+      "localAsk": 6507140,
+      "refBid": 6507139,
+      "refAsk": 6507140,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 696,
+      "localBid": 6507139,
+      "localAsk": 6507140,
+      "refBid": 6507139,
+      "refAsk": 6507140,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 707,
+      "localBid": 6507139,
+      "localAsk": 6507140,
+      "refBid": 6507139,
+      "refAsk": 6507140,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 717,
+      "localBid": 6507139,
+      "localAsk": 6507140,
+      "refBid": 6507139,
+      "refAsk": 6507140,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 727,
+      "localBid": 6507139,
+      "localAsk": 6507140,
+      "refBid": 6507139,
+      "refAsk": 6507140,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 737,
+      "localBid": 6507139,
+      "localAsk": 6507140,
+      "refBid": 6507139,
+      "refAsk": 6507140,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 748,
+      "localBid": 6507139,
+      "localAsk": 6507140,
+      "refBid": 6507139,
+      "refAsk": 6507140,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 758,
+      "localBid": 6507139,
+      "localAsk": 6507140,
+      "refBid": 6507139,
+      "refAsk": 6507140,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 768,
+      "localBid": 6507139,
+      "localAsk": 6507140,
+      "refBid": 6507139,
+      "refAsk": 6507140,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 778,
+      "localBid": 6507338,
+      "localAsk": 6507339,
+      "refBid": 6507338,
+      "refAsk": 6507339,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 789,
+      "localBid": 6507849,
+      "localAsk": 6507850,
+      "refBid": 6507849,
+      "refAsk": 6507850,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 799,
+      "localBid": 6507139,
+      "localAsk": 6507140,
+      "refBid": 6507139,
+      "refAsk": 6507140,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 809,
+      "localBid": 6507139,
+      "localAsk": 6507140,
+      "refBid": 6507139,
+      "refAsk": 6507140,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 819,
+      "localBid": 6507139,
+      "localAsk": 6507140,
+      "refBid": 6507139,
+      "refAsk": 6507140,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 830,
+      "localBid": 6507139,
+      "localAsk": 6507140,
+      "refBid": 6507139,
+      "refAsk": 6507140,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 840,
+      "localBid": 6507139,
+      "localAsk": 6507140,
+      "refBid": 6507139,
+      "refAsk": 6507140,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 850,
+      "localBid": 6507139,
+      "localAsk": 6507140,
+      "refBid": 6507139,
+      "refAsk": 6507140,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 860,
+      "localBid": 6507139,
+      "localAsk": 6507140,
+      "refBid": 6507139,
+      "refAsk": 6507140,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 870,
+      "localBid": 6507139,
+      "localAsk": 6507140,
+      "refBid": 6507139,
+      "refAsk": 6507140,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 881,
+      "localBid": 6507139,
+      "localAsk": 6507140,
+      "refBid": 6507139,
+      "refAsk": 6507140,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 891,
+      "localBid": 6507139,
+      "localAsk": 6507140,
+      "refBid": 6507139,
+      "refAsk": 6507140,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 901,
+      "localBid": 6507139,
+      "localAsk": 6507140,
+      "refBid": 6507139,
+      "refAsk": 6507140,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 911,
+      "localBid": 6507139,
+      "localAsk": 6507140,
+      "refBid": 6507139,
+      "refAsk": 6507140,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 921,
+      "localBid": 6507139,
+      "localAsk": 6507140,
+      "refBid": 6507139,
+      "refAsk": 6507140,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 932,
+      "localBid": 6507139,
+      "localAsk": 6507140,
+      "refBid": 6507139,
+      "refAsk": 6507140,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 942,
+      "localBid": 6507139,
+      "localAsk": 6507140,
+      "refBid": 6507139,
+      "refAsk": 6507140,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 952,
+      "localBid": 6507139,
+      "localAsk": 6507140,
+      "refBid": 6507139,
+      "refAsk": 6507140,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 963,
+      "localBid": 6507139,
+      "localAsk": 6507140,
+      "refBid": 6507139,
+      "refAsk": 6507140,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 973,
+      "localBid": 6506978,
+      "localAsk": 6506979,
+      "refBid": 6506978,
+      "refAsk": 6506979,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 983,
+      "localBid": 6506659,
+      "localAsk": 6506660,
+      "refBid": 6506659,
+      "refAsk": 6506660,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 994,
+      "localBid": 6506659,
+      "localAsk": 6506660,
+      "refBid": 6506659,
+      "refAsk": 6506660,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 1004,
+      "localBid": 6506659,
+      "localAsk": 6506660,
+      "refBid": 6506659,
+      "refAsk": 6506660,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 1014,
+      "localBid": 6506659,
+      "localAsk": 6506660,
+      "refBid": 6506659,
+      "refAsk": 6506660,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 1025,
+      "localBid": 6506659,
+      "localAsk": 6506660,
+      "refBid": 6506659,
+      "refAsk": 6506660,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 1035,
+      "localBid": 6506659,
+      "localAsk": 6506660,
+      "refBid": 6506659,
+      "refAsk": 6506660,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 1045,
+      "localBid": 6506659,
+      "localAsk": 6506660,
+      "refBid": 6506659,
+      "refAsk": 6506660,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 1056,
+      "localBid": 6506659,
+      "localAsk": 6506660,
+      "refBid": 6506659,
+      "refAsk": 6506660,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 1066,
+      "localBid": 6506659,
+      "localAsk": 6506660,
+      "refBid": 6506659,
+      "refAsk": 6506660,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 1076,
+      "localBid": 6506659,
+      "localAsk": 6506660,
+      "refBid": 6506659,
+      "refAsk": 6506660,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 1086,
+      "localBid": 6506659,
+      "localAsk": 6506660,
+      "refBid": 6506659,
+      "refAsk": 6506660,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 1096,
+      "localBid": 6506659,
+      "localAsk": 6506660,
+      "refBid": 6506659,
+      "refAsk": 6506660,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 1106,
+      "localBid": 6507068,
+      "localAsk": 6507069,
+      "refBid": 6507068,
+      "refAsk": 6507069,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 1117,
+      "localBid": 6507068,
+      "localAsk": 6507069,
+      "refBid": 6507068,
+      "refAsk": 6507069,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 1127,
+      "localBid": 6507068,
+      "localAsk": 6507069,
+      "refBid": 6507068,
+      "refAsk": 6507069,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 1137,
+      "localBid": 6507068,
+      "localAsk": 6507069,
+      "refBid": 6507068,
+      "refAsk": 6507069,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 1147,
+      "localBid": 6507068,
+      "localAsk": 6507069,
+      "refBid": 6507068,
+      "refAsk": 6507069,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 1157,
+      "localBid": 6507068,
+      "localAsk": 6507069,
+      "refBid": 6507068,
+      "refAsk": 6507069,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 1168,
+      "localBid": 6507068,
+      "localAsk": 6507069,
+      "refBid": 6507068,
+      "refAsk": 6507069,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 1178,
+      "localBid": 6507068,
+      "localAsk": 6507069,
+      "refBid": 6507068,
+      "refAsk": 6507069,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 1188,
+      "localBid": 6507068,
+      "localAsk": 6507069,
+      "refBid": 6507068,
+      "refAsk": 6507069,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 1198,
+      "localBid": 6507068,
+      "localAsk": 6507069,
+      "refBid": 6507068,
+      "refAsk": 6507069,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    },
+    {
+      "atSec": 1208,
+      "localBid": 6507068,
+      "localAsk": 6507069,
+      "refBid": 6507068,
+      "refAsk": 6507069,
+      "bidDiff": 0,
+      "askDiff": 0,
+      "withinOneTick": true
+    }
+  ]
+}

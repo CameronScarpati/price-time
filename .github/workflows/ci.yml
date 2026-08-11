@@ -1,0 +1,32 @@
+name: ci
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test-build-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+      # Visual smoke: boot the built site in headless Chromium on a fixed
+      # synthetic seed and assert the piece is alive (provenance present,
+      # cells drawn, no page errors). Software GL — a liveness check, not a
+      # performance measurement (see .claude/skills/device-performance).
+      - run: npx playwright install --with-deps chromium
+      - run: |
+          npx vite preview --port 4173 --strictPort &
+          sleep 2
+          node tools/smoke.mjs "http://localhost:4173/?mode=synthetic&seed=42"

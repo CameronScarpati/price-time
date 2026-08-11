@@ -1,0 +1,233 @@
+/* One dark room for the piece to live in. The canvas is the content; the DOM
+ * is quiet chrome that keeps out of its way. */
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  background: #0a0e12;
+  color: #cbd5e1;
+  font: 13px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app { position: fixed; inset: 0; }
+
+.layer { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+/* --- provenance: the one always-present line ----------------------------- */
+
+.provenance {
+  position: absolute;
+  bottom: max(10px, env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+  color: rgba(148, 163, 184, 0.78);
+  user-select: none;
+  pointer-events: none;
+  max-width: 94vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mode-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 2px; background: #94a3b8; vertical-align: 1px; }
+.mode-dot[data-mode="live"] { background: #34d399; border-radius: 50%; }
+.mode-dot[data-mode="synthetic"] { background: #c084fc; border-radius: 1px; transform: rotate(45deg); }
+.mode-dot[data-mode="replay"] { background: #60a5fa; border-radius: 1px; }
+.mode-dot.degraded { animation: dot-breathe 1.6s ease-in-out infinite; }
+@keyframes dot-breathe { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .mode-dot.degraded { animation: none; opacity: 0.6; } }
+
+/* --- chrome: appears with engagement, leaves with idleness --------------- */
+
+.chrome { opacity: 0; transition: none; }
+
+.controls {
+  position: absolute;
+  top: max(10px, env(safe-area-inset-top));
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.control-button {
+  background: rgba(30, 41, 59, 0.72);
+  color: #cbd5e1;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.control-button:hover { border-color: rgba(148, 163, 184, 0.6); }
+.control-button:focus-visible { outline: 2px solid #60a5fa; outline-offset: 1px; }
+
+.clock-chip {
+  font-size: 11.5px;
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  color: #94a3b8;
+}
+.clock-chip[data-state="behind"] { color: #fbbf24; border-color: rgba(251, 191, 36, 0.4); }
+.clock-chip[data-state="paused"] { color: #60a5fa; border-color: rgba(96, 165, 250, 0.4); }
+
+.credit { font-size: 11px; color: rgba(148, 163, 184, 0.6); margin-left: 6px; }
+
+/* The way back after panning away — visible whenever the camera is detached. */
+.follow-chip {
+  position: absolute;
+  bottom: 44px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(30, 41, 59, 0.85);
+  color: #e2e8f0;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s linear;
+}
+.follow-chip.show { opacity: 1; pointer-events: auto; }
+.follow-chip:focus-visible { outline: 2px solid #60a5fa; outline-offset: 1px; }
+
+/* --- captions: the piece narrating itself -------------------------------- */
+
+.caption {
+  position: absolute;
+  top: 18%;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 13.5px;
+  color: rgba(226, 232, 240, 0.92);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.8);
+  opacity: 0;
+  pointer-events: none;
+  white-space: nowrap;
+  max-width: 92vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.caption-show { animation: caption 6s ease-out forwards; }
+@keyframes caption {
+  0% { opacity: 0; transform: translateX(-50%) translateY(4px); }
+  6% { opacity: 1; transform: translateX(-50%) translateY(0); }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .caption-show { animation: caption-still 7s linear forwards; }
+  @keyframes caption-still { 0% { opacity: 1; } 90% { opacity: 1; } 100% { opacity: 0; } }
+}
+
+/* --- tape ----------------------------------------------------------------- */
+
+.tape {
+  position: absolute;
+  right: 12px;
+  bottom: 40px;
+  min-width: 168px;
+  background: rgba(15, 23, 42, 0.82);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  max-height: 40vh;
+  overflow: hidden;
+}
+.tape-title { color: rgba(148, 163, 184, 0.7); font-size: 10.5px; letter-spacing: 0.08em; margin-bottom: 4px; }
+.tape-row { display: flex; gap: 4px; align-items: baseline; }
+.tape-buy { color: #49adf7; }
+.tape-sell { color: #ffab4a; }
+@media (max-width: 600px) { .tape { display: none; } }
+
+/* --- inspector ------------------------------------------------------------ */
+
+.inspector {
+  position: absolute;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 8px;
+  padding: 8px 11px;
+  font-size: 12px;
+  max-width: 250px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s linear;
+}
+.inspector-price { color: #e2e8f0; font-weight: 600; }
+.inspector-dim { color: rgba(148, 163, 184, 0.75); }
+
+/* --- explainer ------------------------------------------------------------ */
+
+.explainer {
+  position: absolute;
+  inset: 0;
+  display: none;
+  background: rgba(4, 6, 9, 0.72);
+  backdrop-filter: blur(3px);
+  z-index: 10;
+  overflow-y: auto;
+}
+.explainer.open { display: block; }
+.explainer-panel {
+  max-width: 560px;
+  margin: 8vh auto;
+  background: #0e141b;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 12px;
+  padding: 28px 30px 24px;
+}
+.explainer-panel h2 { font-size: 14px; color: #e2e8f0; margin: 18px 0 6px; }
+.explainer-panel h2:first-of-type { margin-top: 0; }
+.explainer-panel p { color: rgba(203, 213, 225, 0.85); margin-bottom: 4px; }
+.explainer-panel a { color: #60a5fa; }
+.explainer-close { float: right; margin: -6px -8px 8px 12px; }
+@media (max-width: 640px) { .explainer-panel { margin: 0; border-radius: 0; min-height: 100%; } }
+
+/* --- odds and ends -------------------------------------------------------- */
+
+.hud {
+  position: absolute;
+  top: max(10px, env(safe-area-inset-top));
+  left: 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  color: rgba(52, 211, 153, 0.85);
+  pointer-events: none;
+  white-space: pre;
+}
+
+.fatal {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(127, 29, 29, 0.9);
+  color: #fecaca;
+  border-radius: 8px;
+  padding: 8px 14px;
+  z-index: 20;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

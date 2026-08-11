@@ -1,0 +1,31 @@
+# Netlify deployment for price-time — a fully static site; the browser talks
+# to Bitstamp directly (WebSocket + REST), so no functions and no proxy.
+
+[build]
+  command = "pnpm build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# Hashed assets are immutable; the shell and the replay recording are not.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/replay/*"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+    # No CSP on purpose: the piece needs live wss:// + REST to Bitstamp, and a
+    # subtly wrong policy would silently strand the site in simulated mode.
+    # If one is added later, connect-src must allow wss://ws.bitstamp.net and
+    # https://www.bitstamp.net, plus 'self' for the bundled replay.
