@@ -49,6 +49,10 @@ export class Ui {
   private lastNarration = "";
   private lastNarrationAt = 0;
   private inspectToken = 0;
+  /** Order id the open inspector describes; revalidated against the book so
+   * the box closes the moment its order fills or cancels. */
+  private watchedId: number | null = null;
+  private lastWatchMs = 0;
   private mode = "";
   private reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
   private readonly narrow = matchMedia("(max-width: 480px)");
@@ -113,7 +117,7 @@ export class Ui {
     this.wireKeyboard();
 
     worker.addEventListener("message", (e: MessageEvent<WorkerToMain>) => {
-      if (e.data.type === "inspection") this.showInspection(e.data.result);
+      if (e.data.type === "inspection") this.showInspection(e.data.token, e.data.result);
       if (e.data.type === "fatal") this.fatal(e.data.message);
     });
   }
@@ -175,6 +179,15 @@ export class Ui {
 
     if (this.alpha > 0.05) this.renderTape(meta);
     if (this.showHud) this.renderHud(meta);
+
+    // While the inspector is open, re-resolve its order against the live
+    // book a few times a second. The moment the order fills or cancels the
+    // worker answers null and the box closes — it never describes a ghost.
+    // (Bonus: age and queue position tick forward while it stays open.)
+    if (this.watchedId !== null && nowMs - this.lastWatchMs > 400) {
+      this.lastWatchMs = nowMs;
+      this.post({ type: "watch", token: ++this.inspectToken, id: this.watchedId });
+    }
   }
 
   // ------------------------------------------------------------- engagement
@@ -228,7 +241,10 @@ export class Ui {
     const r = this.renderer();
     const hit = hitTest(clientX, clientY, r.layoutParams, r.bestBid, r.bestAsk);
     if (hit === null) {
-      this.inspector.style.opacity = "0";
+      // Bump the token so an in-flight reply can't resurrect the box after
+      // the pointer has already left the field.
+      this.inspectToken++;
+      this.hideInspector();
       return;
     }
     const token = ++this.inspectToken;
@@ -237,11 +253,18 @@ export class Ui {
     this.inspector.style.top = `${Math.min(clientY + 14, innerHeight - 90)}px`;
   }
 
-  private showInspection(result: InspectionResult | null): void {
+  private hideInspector(): void {
+    this.inspector.style.opacity = "0";
+    this.watchedId = null;
+  }
+
+  private showInspection(token: number, result: InspectionResult | null): void {
+    if (token !== this.inspectToken) return; // stale reply, a newer ask is out
     if (result === null) {
-      this.inspector.style.opacity = "0";
+      this.hideInspector();
       return;
     }
+    this.watchedId = result.id;
     const age =
       result.ageSec < 90
         ? `${result.ageSec.toFixed(0)}s`

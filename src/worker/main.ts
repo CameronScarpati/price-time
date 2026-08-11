@@ -42,6 +42,9 @@ onmessage = (e: MessageEvent<MainToWorker>) => {
           result: pipeline.inspect(msg.side, msg.tick, msg.cumSats),
         });
         break;
+      case "watch":
+        post({ type: "inspection", token: msg.token, result: pipeline.inspectById(msg.id) });
+        break;
     }
   } catch (err) {
     // Loud in development, visible in production: the page shows the failure

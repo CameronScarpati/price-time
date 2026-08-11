@@ -10,21 +10,22 @@ feeling of the piece lives entirely in this surface. The target feeling is
 HYPNOSIS — zone-out, screensaver gravity — via **event scarcity with calm
 pacing** (Listen to Wikipedia is captivating at one bell per second;
 machine-gun pops kill the trance) and **a lit, still room** (gradient,
-membrane, vignette). Two hard NOs, both owner-verified on real hardware:
+vignette). Three hard NOs, all owner-verified on real hardware:
 NO whole-field persistence/afterglow of any kind (reads as OLED smearing),
-and NO lingering event smears (the 950ms heat streaks read as motion blur
-and caused literal headache). Crisp field, brief crisp events.
+NO lingering event smears (the 950ms heat streaks read as motion blur
+and caused literal headache), and NO glow behind the field (the spread
+membrane, even scissored and edge-faded, read as a stray beam of light —
+light belongs to the cells themselves). Crisp field, brief crisp events.
 
 ## The frame composition (order matters)
 
 backdrop (room gradient + vignette folded into ONE opaque fullscreen pass —
 it replaces the clear; every saved fullscreen pass is battery on a 3x 120Hz
 phone) → cells (soft 0.7px edge feather, chrome exclusion bands top/bottom)
-→ the membrane (warm/cool band inside the spread whose height IS the spread;
-SCISSORED to its band and faded to true zero horizontally — it once ran the
-full spine width and read as a stray beam) → event sprites (crisp, short).
-The rAF loop renders at ≤60fps even on ProMotion: a mostly-still field
-gains nothing from 120Hz that is worth double the fill rate.
+→ event sprites (crisp, short). Nothing draws between backdrop and cells:
+the spread gap is empty room, its breathing carried by the cells' edges
+alone. The rAF loop renders at ≤60fps even on ProMotion: a mostly-still
+field gains nothing from 120Hz that is worth double the fill rate.
 
 ## Timing values in use (tuned, not defaulted)
 
@@ -47,6 +48,10 @@ gains nothing from 120Hz that is worth double the fill rate.
   the trance. Desktop frames the ~4th occupied level (rows 4.5–14px/tick);
   a phone frames roughly twice the context at ~15px median cells (hands-on:
   the phone once felt like staring at three bricks).
+- Released pan: a FINITE ease-out-cubic glide (160–480ms by distance) to a
+  fixed endpoint snapped to whole ticks when rows are legible (≥3px/tick).
+  Asymptotic friction was tried first and dragged its feet for the last
+  half-second (hands-on); a decisive landing on the grid beats a long coast.
 - Synthetic pacing is deliberately SLOWER than live's raw message rate
   (makers 9/s, noise 5/s across ~16-tick depth with ~11s lifetimes, takers
   0.22/s): live scatters its churn across thousands of offscreen levels
