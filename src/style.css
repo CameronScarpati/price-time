@@ -13,6 +13,11 @@ html, body {
 }
 
 #app { position: fixed; inset: 0; }
+/* Mobile browsers under-report 100% while their URL bar animates; dvh tracks
+ * the real visible height so nothing hides behind browser chrome. */
+@supports (height: 100dvh) {
+  #app { height: 100dvh; }
+}
 
 .layer { position: absolute; inset: 0; width: 100%; height: 100%; }
 
@@ -20,7 +25,7 @@ html, body {
 
 .provenance {
   position: absolute;
-  bottom: max(10px, env(safe-area-inset-bottom));
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
   left: 50%;
   transform: translateX(-50%);
   white-space: nowrap;
@@ -85,7 +90,7 @@ html, body {
 /* The way back after panning away — visible whenever the camera is detached. */
 .follow-chip {
   position: absolute;
-  bottom: 44px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 44px);
   left: 50%;
   transform: translateX(-50%);
   background: rgba(30, 41, 59, 0.85);

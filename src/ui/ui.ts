@@ -312,6 +312,13 @@ export class Ui {
       "several prices. After a sweep, watch the hole refill — that is liquidity healing. " +
       "Zoom out and the queues melt into the market's whole shape; the far, dim orders are " +
       "wishes parked miles from the price, some resting for days.");
+    section("Finding your way",
+      "Drag up or down to wander the price axis; scroll or pinch to zoom all " +
+      "the way from single orders out to the market's whole shape. Double-tap " +
+      "(or double-click) to snap back to where the market is trading — a " +
+      "“follow the market” button also appears whenever you have " +
+      "wandered off. Space pauses; what you miss while paused replays on the " +
+      "way back, labeled.");
     section("Is it real?",
       "Yes, with one honest caveat. The order flow is Bitstamp's public feed, reconstructed " +
       "through a matching engine built for this piece — so at rare margins its matches can " +

@@ -66,6 +66,15 @@ third hue without a domain meaning and an explainer entry.
 - The frame ALWAYS contains both best bid and best ask — the camera's touch
   cap guarantees it. Row legibility yields on gappy books (a phone once
   showed only the bid side because the zoom floor won; it must never again).
+- On skeletal books the frame caps at a few spreads around the touch
+  (max(4·spread, 30) ticks): framing the 4th level hundreds of ticks out
+  fills the screen with void. The close-up of the queue IS the composition;
+  zoom-out remains the viewer's.
+- Spine (phone) scales width by LEVEL depth (p80 top-level total spans ~62%
+  of the width); scaling by order size left every row huddled at the left
+  edge. Its words (price rules, readout) live on the empty right edge.
+- Render at full devicePixelRatio up to 3× — capping at 2 made every modern
+  phone visibly soft.
 - Panning detaches the camera until the viewer recenters (chip, double-tap,
   Home). Never silently drag the viewer back mid-exploration.
 - Desktop = seam (two-sided, fronts meeting at the price axis); phone = spine
