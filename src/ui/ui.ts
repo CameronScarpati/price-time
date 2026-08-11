@@ -47,6 +47,7 @@ export class Ui {
   private readonly modeText: HTMLElement;
   private readonly caption: HTMLElement;
   private readonly controls: HTMLElement;
+  private readonly followChip: HTMLButtonElement;
   private readonly pauseButton: HTMLButtonElement;
   private readonly clockChip: HTMLElement;
   private readonly tapePanel: HTMLElement;
@@ -77,6 +78,12 @@ export class Ui {
     explainButton.addEventListener("click", () => this.toggleExplainer(true));
     el("span", "credit", this.controls, "a piece by Cameron Scarpati · data: Bitstamp");
 
+    this.followChip = el("button", "follow-chip", root, "↩ follow the market");
+    this.followChip.addEventListener("click", () => {
+      this.renderer().camera.recenter();
+      this.engage();
+    });
+
     this.tapePanel = el("div", "tape chrome", root);
     el("div", "tape-title", this.tapePanel, "the tape");
     this.tapeList = el("div", "tape-list", this.tapePanel);
@@ -102,6 +109,9 @@ export class Ui {
   // ---------------------------------------------------------------- delegate
 
   chromeAlpha(): number {
+    // The follow chip rides its own logic: visible whenever the viewer has
+    // panned away, regardless of chrome idle state — it IS the way back.
+    this.followChip.classList.toggle("show", this.renderer().camera.detached);
     const target = performance.now() < this.chromeVisibleUntil ? 1 : 0;
     this.alpha += (target - this.alpha) * (this.reduced ? 1 : 0.12);
     const panels = [this.controls, this.tapePanel];
@@ -169,6 +179,7 @@ export class Ui {
 
   private wireKeyboard(): void {
     window.addEventListener("keydown", (e) => {
+      const camera = this.renderer().camera;
       if (e.key === " " && !(e.target instanceof HTMLButtonElement)) {
         e.preventDefault();
         this.togglePause();
@@ -176,6 +187,13 @@ export class Ui {
         this.toggleExplainer(true);
       } else if (e.key === "Escape") {
         this.toggleExplainer(false);
+      } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+        e.preventDefault();
+        camera.panTicks(((e.key === "ArrowUp" ? -1 : 1) * 80) / camera.pxPerTick);
+        this.engage();
+      } else if (e.key === "Home" || e.key === "0") {
+        camera.recenter();
+        this.engage();
       }
     });
   }

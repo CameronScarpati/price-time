@@ -133,7 +133,7 @@ export class Renderer {
     const cssW = this.layoutParams.viewW;
     const cssH = this.layoutParams.viewH;
 
-    this.camera.follow(mid, f32[Header.SpanHintTicks], cssH, nowMs);
+    this.camera.follow(mid, f32[Header.SpanHintTicks], f32[Header.SpreadTicks], cssH);
     this.camera.update(dtMs, nowMs, reduced);
 
     // Length scale: the median top-level order reads ~26px, so the visible
@@ -181,10 +181,11 @@ export class Renderer {
       const y = tickToY(event.tick, p);
       if (y < -40 || y > p.viewH + 40) continue;
       if (event.kind === "trade") {
-        const front = p.layout === 0 ? p.seamX : p.seamX;
-        // Glow radius grows with the square root of quantity so glow AREA is
-        // proportional to size — a linear radius would overstate big trades.
-        const sizePx = Math.min(9 + Math.sqrt(event.sats * this.pxPerSat) * 2.4, 64);
+        const front = p.seamX;
+        // A strike, not a bloom: tight, row-hugging, brief. Radius grows with
+        // the square root of quantity so glow AREA tracks size — a linear
+        // radius would overstate big trades.
+        const sizePx = Math.min(7 + Math.sqrt(event.sats * this.pxPerSat) * 1.6, 30);
         this.sprites.push({
           xPx: front, yPx: y, sizePx,
           age01: 0,
@@ -192,18 +193,18 @@ export class Renderer {
           tint: event.liquidation ? 2 : event.aggressor === Side.Bid ? 1 : 0,
           delayMs: reduced ? 0 : Math.min(tradeIndex++ * 45, 220),
           bornMs: nowMs,
-          lifeMs: reduced ? 1600 : 420,
+          lifeMs: reduced ? 1600 : 340,
         });
       } else if (!reduced) {
         const dir = p.layout === 1 ? 1 : event.side === Side.Bid ? -1 : 1;
         const x = p.seamX + dir * (event.aheadSats + event.sats / 2) * this.pxPerSat;
         this.sprites.push({
           xPx: x, yPx: y,
-          sizePx: Math.min(4 + event.sats * this.pxPerSat * 0.5, 26),
+          sizePx: Math.min(4 + event.sats * this.pxPerSat * 0.4, 14),
           age01: 0,
           kind: SpriteKind.Ghost,
           tint: event.side === Side.Bid ? 0 : 1,
-          delayMs: 0, bornMs: nowMs, lifeMs: 260,
+          delayMs: 0, bornMs: nowMs, lifeMs: 220,
         });
       }
     }

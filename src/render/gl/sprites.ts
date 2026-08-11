@@ -38,7 +38,7 @@ out float vAge;
 out float vKind;
 out float vTint;
 void main() {
-  float grow = aKind == 2.0 ? (0.4 + aAge * 1.2) : (aKind == 0.0 ? (0.7 + aAge * 0.9) : 1.0);
+  float grow = aKind == 2.0 ? (0.4 + aAge * 1.2) : (aKind == 0.0 ? (0.85 + aAge * 0.35) : 1.0);
   vec2 corner = (aCorner - 0.5) * aSize * 2.2 * grow;
   vec2 px = aPos + corner;
   gl_Position = vec4(px.x / uViewPx.x * 2.0 - 1.0, 1.0 - px.y / uViewPx.y * 2.0, 0.0, 1.0);
@@ -59,21 +59,24 @@ const vec3 BID = vec3(0.263, 0.686, 0.961);
 const vec3 ASK = vec3(1.0, 0.667, 0.278);
 const vec3 LIQ = vec3(0.71, 0.49, 1.0);
 void main() {
-  float r = length(vLocal) * 2.0;
   vec3 tint = vTint > 1.5 ? LIQ : mix(BID, ASK, vTint);
   float fade = 1.0 - vAge;
   vec3 color; float a;
   if (vKind == 0.0) {
-    // Trade flash: white-hot core cooling into the side's hue.
+    // Trade flash: a strike at the queue front — elliptical and row-hugging,
+    // not a floating orb. White-hot core cooling into the side's hue.
+    float r = length(vec2(vLocal.x, vLocal.y * 2.1)) * 2.0;
     float core = smoothstep(1.0, 0.0, r);
     color = mix(tint, vec3(1.0), core * fade * 0.8);
-    a = core * fade * fade;
+    a = core * fade * fade * 0.85;
   } else if (vKind == 1.0) {
     // Cancel ghost: a faint puff where a quote died — small, brief, cool.
+    float r = length(vec2(vLocal.x, vLocal.y * 1.6)) * 2.0;
     float puff = smoothstep(0.9, 0.0, r);
     color = tint;
-    a = puff * fade * 0.16;
+    a = puff * fade * 0.1;
   } else {
+    float r = length(vLocal) * 2.0;
     // Reduced-motion ring: a quiet annulus, no growth spike, long fade.
     float ring = smoothstep(0.12, 0.0, abs(r - (0.4 + vAge * 0.5)));
     color = mix(tint, vec3(1.0), 0.3);

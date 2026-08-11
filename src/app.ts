@@ -53,10 +53,12 @@ function boot(): void {
     worker.postMessage({ type: "hidden", hidden: document.hidden } satisfies MainToWorker);
   });
 
-  // Input: drag pans price, wheel/pinch zooms, hover/tap inspects.
+  // Input: drag pans price, wheel/pinch zooms, hover/tap inspects,
+  // double-click or double-tap snaps back to the market.
   let dragging = false;
   let lastY = 0;
   let pinchDist = 0;
+  let lastTapMs = 0;
   glCanvas.style.touchAction = "none";
   window.addEventListener("pointerdown", (e) => {
     dragging = true;
@@ -64,12 +66,25 @@ function boot(): void {
   });
   window.addEventListener("pointerup", (e) => {
     dragging = false;
+    if (e.pointerType === "touch") {
+      const now = performance.now();
+      if (now - lastTapMs < 300) {
+        renderer.camera.recenter();
+        lastTapMs = 0;
+        return;
+      }
+      lastTapMs = now;
+    }
     ui.inspectAt(e.clientX, e.clientY);
   });
+  window.addEventListener("dblclick", () => renderer.camera.recenter());
   window.addEventListener("pointermove", (e) => {
     if (dragging && e.buttons > 0) {
-      renderer.camera.panTicks((e.clientY - lastY) / renderer.camera.pxPerTick, performance.now());
-      lastY = e.clientY;
+      // A real pan, not a jittery tap: only detach past a few pixels.
+      if (Math.abs(e.clientY - lastY) > 2) {
+        renderer.camera.panTicks((e.clientY - lastY) / renderer.camera.pxPerTick);
+        lastY = e.clientY;
+      }
     } else if (e.pointerType === "mouse") {
       ui.inspectAt(e.clientX, e.clientY);
     }

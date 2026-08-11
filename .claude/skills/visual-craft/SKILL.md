@@ -10,13 +10,15 @@ feeling of the piece lives entirely in this surface.
 
 ## Timing values in use (tuned, not defaulted)
 
-- Trade flash: 420ms life, decay `fade²` (hot core cools into the side's hue);
-  radius grows ~0.9× over life. Radius ∝ √quantity so glow AREA tracks size —
-  linear radius overstates big trades (area perception is compressive).
+- Trade flash: 340ms life, decay `fade²` (hot core cools into the side's hue),
+  ELLIPTICAL and row-hugging (y compressed ~2×) — a strike at the queue front,
+  never a floating orb (round blooms read as UFOs on a real phone; we shipped
+  that mistake once). Radius ∝ √quantity so glow AREA tracks size — linear
+  radius overstates big trades (area perception is compressive). Max ~30px.
 - Burst stagger: i-th trade in a frame starts at `min(i·45ms, 220ms)`. A sweep
   must read as a RUN up the book, never one merged blob. Never stagger so far
   that event order inverts on screen.
-- Cancel puff: 260ms, small, cool, alpha ≤0.16 — a sigh, not an event. Cancels
+- Cancel puff: 220ms, ≤14px, cool, alpha ≤0.10 — a sigh, not an event. Cancels
   are 300× more common than trades; at trade-level salience they'd be noise.
 - Arrival ramp: 120ms alpha-in via the age channel in the cell shader.
 - Age → luminance: flare `mix(base, white, 0.28·(1−age/8s))`, then ember decay
@@ -37,6 +39,11 @@ third hue without a domain meaning and an explainer entry.
 
 - The spread gap is the piece's center of gravity: at rest it sits mid-screen,
   breathing. Anything that competes with it must earn the attention.
+- The frame ALWAYS contains both best bid and best ask — the camera's touch
+  cap guarantees it. Row legibility yields on gappy books (a phone once
+  showed only the bid side because the zoom floor won; it must never again).
+- Panning detaches the camera until the viewer recenters (chip, double-tap,
+  Home). Never silently drag the viewer back mid-exploration.
 - Desktop = seam (two-sided, fronts meeting at the price axis); phone = spine
   (full-width rows, front at left). Same cells, two layouts — change both or
   neither, and keep `layout.ts` (CPU) in lockstep with `cells.ts` (shader).

@@ -82,6 +82,27 @@ html, body {
 
 .credit { font-size: 11px; color: rgba(148, 163, 184, 0.6); margin-left: 6px; }
 
+/* The way back after panning away — visible whenever the camera is detached. */
+.follow-chip {
+  position: absolute;
+  bottom: 44px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(30, 41, 59, 0.85);
+  color: #e2e8f0;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s linear;
+}
+.follow-chip.show { opacity: 1; pointer-events: auto; }
+.follow-chip:focus-visible { outline: 2px solid #60a5fa; outline-offset: 1px; }
+
 /* --- captions: the piece narrating itself -------------------------------- */
 
 .caption {
