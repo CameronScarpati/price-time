@@ -29,12 +29,16 @@ field gains nothing from 120Hz that is worth double the fill rate.
 
 ## Timing values in use (tuned, not defaulted)
 
-- Trade = a crisp STRIKE: a compact white-hot pulse in the side's hue at the
-  queue front, 260ms life, sharp attack, `fade²` decay, no travel and no
-  tail. The journey here: round blooms (UFOs) → fast ellipses (weird at
-  speed) → 950ms heat streaks (read as motion blur and literally made the
-  owner's head hurt). Lingering smears of any kind are OUT — brief crisp
-  flashes only. Size ∝ √quantity so glow AREA tracks size; max ~22px.
+- Trade = a BITE: the exact rectangular span the level lost, flashing
+  white-hot in place and cooling into the maker side's hue, 220ms, sharp
+  attack, `fade²` decay ending decisively. Anchored flush against the bar
+  (span start = the level's post-trade total in the length lens) so it can
+  NEVER float in empty space. The journey here: round blooms (UFOs) → fast
+  ellipses (weird at speed) → 950ms heat streaks (motion blur, literal
+  headache) → compact ellipses at the queue front (caught mid-decay or
+  orphaned by a price move, they read as dirty smudges hanging in space).
+  Soft round glows detached from the bars are OUT; event light must live in
+  the geometry of the row it happened to.
 - Burst stagger: i-th trade in a frame starts at `min(i·45ms, 220ms)`. A sweep
   must read as a RUN up the book, never one merged blob. Never stagger so far
   that event order inverts on screen.
@@ -52,6 +56,14 @@ field gains nothing from 120Hz that is worth double the fill rate.
   fixed endpoint snapped to whole ticks when rows are legible (≥3px/tick).
   Asymptotic friction was tried first and dragged its feet for the last
   half-second (hands-on); a decisive landing on the grid beats a long coast.
+  Held arrow keys integrate the same way: 0.6 → 4 screens/s over ~1.6s of
+  hold, released into the identical grid-snapped glide.
+- The SCALE belongs to whoever touched it last. Auto framing retargets zoom
+  only past a 12% deadband (the span hint breathes with every book change —
+  retargeting each breath made the whole field pump), freezes while the
+  viewer is panned away, and stops entirely once they wheel/pinch: a
+  hand-set scale holds rock-steady until recenter. Only the both-bests cap
+  may override, and only while following.
 - Synthetic pacing is deliberately SLOWER than live's raw message rate
   (makers 9/s, noise 5/s across ~16-tick depth with ~11s lifetimes, takers
   0.22/s): live scatters its churn across thousands of offscreen levels

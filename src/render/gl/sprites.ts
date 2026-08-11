@@ -3,23 +3,31 @@ import { cornerBuffer, createProgram } from "./context";
 /**
  * Event sprites: the decays of instantaneous market events. A trade IS an
  * instant; only its afterglow is animated (the brief's rule, verbatim).
- * Three kinds: trade HEAT STREAK (a warm wash that pools along the consumed
- * row and cools slowly — rapid trades sum into sustained warmth instead of
- * strobing), cancel ghost (a cool sigh where a quote died), and the
- * reduced-motion ring (a slow, still marker replacing the streak when motion
- * must be gentle).
+ * Three kinds: trade BITE (the exact rectangular span of book the trade
+ * removed, flashing white-hot in place and cooling into the maker side's
+ * hue — anchored to the bar it bit, never floating in space), cancel ghost
+ * (a cool sigh where a quote died), and the reduced-motion ring (a slow,
+ * still marker replacing the bite when motion must be gentle).
  *
- * Encoding note: a streak's direction (into the consumed side) rides the
- * SIGN of its size field — negative size points left. It keeps the instance
- * layout at six floats.
+ * The bite replaced a soft elliptical strike at the queue front: caught
+ * mid-decay — or left behind after the price moved — the ellipse read as a
+ * dirty smudge hanging in empty space (owner-verified on hardware). A
+ * rectangle in the row's own geometry is a bar briefly remembering its
+ * lost span; it cannot read as dirt.
+ *
+ * Encoding note: a sprite's direction (into the consumed side) rides the
+ * SIGN of its size field — negative size extends left.
  */
 
-export const SpriteKind = { Flash: 0, Ghost: 1, Ring: 2 } as const;
+export const SpriteKind = { Bite: 0, Ghost: 1, Ring: 2 } as const;
 
 export interface Sprite {
   xPx: number;
   yPx: number;
+  /** Bite: signed span width. Ghost/Ring: footprint size. */
   sizePx: number;
+  /** Bite row height in px; unused by ghost/ring. */
+  hPx: number;
   /** 0 = born, 1 = gone. Advanced by the renderer's presentation clock. */
   age01: number;
   kind: (typeof SpriteKind)[keyof typeof SpriteKind];
@@ -35,26 +43,25 @@ const VS = `#version 300 es
 layout(location=0) in vec2 aCorner;
 layout(location=1) in vec2 aPos;
 layout(location=2) in float aSize;
-layout(location=3) in float aAge;
-layout(location=4) in float aKind;
-layout(location=5) in float aTint;
+layout(location=3) in float aH;
+layout(location=4) in float aAge;
+layout(location=5) in float aKind;
+layout(location=6) in float aTint;
 uniform vec2 uViewPx;
 out vec2 vLocal;
 out float vAge;
 out float vKind;
 out float vTint;
-out float vDir;
 void main() {
   float size = abs(aSize);
   float dir = aSize < 0.0 ? -1.0 : 1.0;
   vec2 corner;
   vec2 center = aPos;
   if (aKind == 0.0) {
-    // Strike: a crisp, compact pulse at the queue front, nudged into the
-    // consumed side. No elongated travel — lingering smears read as motion
-    // blur and made a real viewer's head hurt.
-    corner = (aCorner - 0.5) * vec2(size * 1.7, size * 0.95);
-    center.x += dir * size * 0.55;
+    // Bite: a row-shaped quad over the vanished span. aPos.x is the span's
+    // inner edge; the quad extends outward in the consumed direction.
+    corner = (aCorner - 0.5) * vec2(size, aH);
+    center.x += dir * size * 0.5;
   } else {
     float grow = aKind == 2.0 ? (0.4 + aAge * 1.2) : 1.0;
     corner = (aCorner - 0.5) * size * 2.2 * grow;
@@ -65,7 +72,6 @@ void main() {
   vAge = aAge;
   vKind = aKind;
   vTint = aTint;
-  vDir = dir;
 }`;
 
 const FS = `#version 300 es
@@ -74,7 +80,6 @@ in vec2 vLocal;
 in float vAge;
 in float vKind;
 in float vTint;
-in float vDir;
 out vec4 outColor;
 const vec3 BID = vec3(0.263, 0.686, 0.961);
 const vec3 ASK = vec3(1.0, 0.667, 0.278);
@@ -84,14 +89,15 @@ void main() {
   float fade = 1.0 - vAge;
   vec3 color; float a;
   if (vKind == 0.0) {
-    // Strike: white-hot core in the side's hue, sharp attack, brief clean
-    // decay. Crisp by design — no tail, no smear.
-    float r = length(vec2(vLocal.x * 1.15, vLocal.y * 1.9)) * 2.0;
-    float core = smoothstep(0.95, 0.15, r);
-    float attack = smoothstep(0.0, 0.10, vAge);
+    // Bite: sharp-edged like the bars themselves — a soft round glow here
+    // reads as a smudge, hard-learned. White-hot at birth, cooling into
+    // the side hue, gone completely; fade² ends decisively, no dull tail.
+    vec2 d = (0.5 - abs(vLocal)) * 2.0;
+    float rect = smoothstep(0.0, 0.10, min(d.x, d.y));
+    float attack = smoothstep(0.0, 0.12, vAge);
     float decay = fade * fade;
-    color = mix(tint, vec3(1.0), core * decay * 0.7);
-    a = core * attack * decay * 0.55;
+    color = mix(tint, vec3(1.0), 0.75 * decay);
+    a = rect * attack * decay * 0.85;
   } else if (vKind == 1.0) {
     // Cancel ghost: a row-aligned sliver where a quote died — the shape of
     // the cell that vanished. Brief and faint: it must never read as an
@@ -110,7 +116,7 @@ void main() {
   outColor = vec4(color * a, a);
 }`;
 
-const FLOATS_PER_SPRITE = 6;
+const FLOATS_PER_SPRITE = 7;
 const MAX_SPRITES = 512;
 
 export class SpritePipeline {
@@ -134,7 +140,7 @@ export class SpritePipeline {
     gl.bufferData(gl.ARRAY_BUFFER, this.scratch.byteLength, gl.DYNAMIC_DRAW);
     const stride = FLOATS_PER_SPRITE * 4;
     const layout: [number, number, number][] = [
-      [1, 2, 0], [2, 1, 8], [3, 1, 12], [4, 1, 16], [5, 1, 20],
+      [1, 2, 0], [2, 1, 8], [3, 1, 12], [4, 1, 16], [5, 1, 20], [6, 1, 24],
     ];
     for (const [loc, size, offset] of layout) {
       gl.enableVertexAttribArray(loc);
@@ -154,9 +160,10 @@ export class SpritePipeline {
       this.scratch[base] = s.xPx;
       this.scratch[base + 1] = s.yPx;
       this.scratch[base + 2] = s.sizePx;
-      this.scratch[base + 3] = s.age01;
-      this.scratch[base + 4] = s.kind;
-      this.scratch[base + 5] = s.tint;
+      this.scratch[base + 3] = s.hPx;
+      this.scratch[base + 4] = s.age01;
+      this.scratch[base + 5] = s.kind;
+      this.scratch[base + 6] = s.tint;
       n++;
     }
     if (n === 0) return;

@@ -192,8 +192,13 @@ export class Ui {
 
   // ------------------------------------------------------------- engagement
 
-  private engage(): void {
+  engage(): void {
     this.chromeVisibleUntil = performance.now() + 4000;
+  }
+
+  /** True while the explainer overlay is open — travel keys yield to it. */
+  explainerOpen(): boolean {
+    return this.explainer.classList.contains("open");
   }
 
   private wireEngagement(): void {
@@ -203,9 +208,11 @@ export class Ui {
     window.addEventListener("focusin", () => this.engage());
   }
 
+  /** Words and panels only — travel keys (arrows, PageUp/Down, Home) live
+   * with the rest of the camera input in app.ts, where the frame loop can
+   * integrate a HELD key into accelerating motion. */
   private wireKeyboard(): void {
     window.addEventListener("keydown", (e) => {
-      const camera = this.renderer().camera;
       if (e.key === " " && !(e.target instanceof HTMLButtonElement)) {
         e.preventDefault();
         this.togglePause();
@@ -213,13 +220,6 @@ export class Ui {
         this.toggleExplainer(true);
       } else if (e.key === "Escape") {
         this.toggleExplainer(false);
-      } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
-        e.preventDefault();
-        camera.panTicks(((e.key === "ArrowUp" ? -1 : 1) * 80) / camera.pxPerTick);
-        this.engage();
-      } else if (e.key === "Home" || e.key === "0") {
-        camera.recenter();
-        this.engage();
       }
     });
   }
@@ -351,11 +351,13 @@ export class Ui {
       "wishes parked miles from the price, some resting for days.");
     section("Finding your way",
       "Drag up or down to wander the price axis; scroll or pinch to zoom all " +
-      "the way from single orders out to the market's whole shape. Double-tap " +
-      "(or double-click) to snap back to where the market is trading — a " +
-      "“follow the market” button also appears whenever you have " +
-      "wandered off. Space pauses; what you miss while paused replays on the " +
-      "way back, labeled.");
+      "the way from single orders out to the market's whole shape — once you " +
+      "set a zoom, it holds until you return. Arrow keys travel too: tap to " +
+      "step a few rows, hold to accelerate through the book; PageUp and " +
+      "PageDown leap a screen at a time. Double-tap, double-click, or Home " +
+      "snaps back to where the market is trading — a “follow the market” " +
+      "button also appears whenever you have wandered off. Space pauses; " +
+      "what you miss while paused replays on the way back, labeled.");
     section("Is it real?",
       "Yes, with one honest caveat. The order flow is Bitstamp's public feed, reconstructed " +
       "through a matching engine built for this piece — so at rare margins its matches can " +
