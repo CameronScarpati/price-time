@@ -35,9 +35,15 @@ export class Camera {
     // plus margin) always fits the frame. The profile differs by viewport:
     // a phone frames far more context, smaller (hands-on feedback: default
     // phone framing once felt like staring at three bricks).
-    const span = Math.max(halfSpanTicks * 2, 24);
+    // Floor at 12 ticks so a skeletal book's close-up profile can actually
+    // commit to the queue; dense profiles hit their maxPpt long before this
+    // floor matters, so their framing is unchanged.
+    const span = Math.max(halfSpanTicks * 2, 12);
     let ppt = Math.min(Math.max((viewH * profile.frac) / span, profile.minPpt), profile.maxPpt);
-    const touchCap = (viewH * 0.55) / Math.max(spreadTicks + 12, 12);
+    // |spread|: an externally crossed book carries a negative spread, and its
+    // displaced bests must STILL both fit the frame — the invariant survives
+    // the anomaly by zooming out, never by hiding a side.
+    const touchCap = (viewH * 0.55) / Math.max(Math.abs(spreadTicks) + 12, 12);
     ppt = Math.max(Math.min(ppt, touchCap), 0.05);
     this.autoPxPerTick = ppt;
     if (!this.initialized) {

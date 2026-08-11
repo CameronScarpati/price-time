@@ -1,5 +1,8 @@
 import { Side, opposite } from "../engine/types";
-import { FRAME_BYTES, Header, type FrameMeta, type MainToWorker, type WorkerToMain } from "../worker/protocol";
+import {
+  FRAME_BYTES, FRAME_HEADER_FLOATS, FRAME_STRIDE, Header,
+  type FrameMeta, type MainToWorker, type WorkerToMain,
+} from "../worker/protocol";
 import { Camera } from "./camera";
 import { CellPipeline } from "./gl/cells";
 import { PostPipeline } from "./gl/post";
@@ -47,6 +50,15 @@ export class Renderer {
   private sprites: Sprite[] = [];
   private pxPerSat = 42 / 8_000_000;
   private transitionStartMs = 0;
+  private dpr = 1;
+
+  // Bimodal framing state, measured from the transferred frame (facts the
+  // worker packed — the renderer derives a standpoint, never market state).
+  // A skeletal book (a handful of populated levels near the touch) gets a
+  // committed close-up of the queue; a dense book keeps the wide standpoint.
+  private skeletal = false;
+  private touchLevels = 99;
+  private occupiedHalfSpanTicks = 0;
 
   private lastFrameMs = 0;
   /** Frame-time ring for the HUD and the recorded budget numbers. */
@@ -62,12 +74,7 @@ export class Renderer {
     private readonly worker: Worker,
     private readonly delegate: RendererDelegate,
   ) {
-    // preserveDrawingBuffer carries the previous frame into this one, so the
-    // fade pass can wash it toward the background instead of clearing —
-    // ~100ms of phosphor afterglow on everything that moves.
-    const gl = canvas.getContext("webgl2", {
-      antialias: false, alpha: false, preserveDrawingBuffer: true,
-    });
+    const gl = canvas.getContext("webgl2", { antialias: false, alpha: false });
     if (gl === null) throw new Error("WebGL2 unavailable");
     this.gl = gl;
     this.cells = new CellPipeline(gl);
@@ -103,6 +110,7 @@ export class Renderer {
   }
 
   resize(cssW: number, cssH: number, dpr: number): void {
+    this.dpr = dpr;
     this.canvas.width = Math.round(cssW * dpr);
     this.canvas.height = Math.round(cssH * dpr);
     this.gl.viewport(0, 0, this.canvas.width, this.canvas.height);
@@ -127,18 +135,18 @@ export class Renderer {
     const frame = this.latest;
     const gl = this.gl;
     const reduced = this.delegate.reducedMotion();
-    if (reduced) {
-      // Reduced motion gets no afterglow: discrete stillness, not smear.
-      gl.clearColor(BG[0], BG[1], BG[2], 1);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-    } else {
-      // 0.22: ~70ms afterglow. Longer trails read as flow on a dense field
-      // but as grime on a sparse one; this holds up on both.
-      this.postFx.fade(BG, 0.22);
-    }
+    // Hard clear every frame. A whole-field phosphor wash shipped briefly and
+    // read as afterimage smearing at real OLED contrast — decay belongs to
+    // discrete event sprites only, never to the field itself.
+    gl.clearColor(BG[0], BG[1], BG[2], 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    // The room: a static radial lift so the field reads as a lit space, not
+    // a dead buffer. Zero motion — same grammar as the vignette.
+    this.postFx.room(this.layoutParams.viewW, this.layoutParams.viewH);
     if (frame === null) return;
     if (!frame.consumed) {
       frame.consumed = true;
+      this.measureOccupancy(frame.f32);
       this.consumeMeta(frame, nowMs, reduced);
     }
 
@@ -151,12 +159,54 @@ export class Renderer {
 
     const p = this.layoutParams;
     p.layout = cssW / cssH < 0.8 ? 1 : 0;
-    // A phone frames far more of the field, smaller; a desktop sits closer.
-    const profile =
+    // The spine lifts the composition to the portrait optical center — the
+    // provenance and safe area occupy the bottom. Lockstep: layout.ts reads
+    // this and cells.ts receives it as uCenterYPx.
+    p.centerYFrac = p.layout === 1 ? 0.44 : 0.5;
+    // Framing is bimodal on occupancy. Dense books: a phone frames far more
+    // of the field, smaller; a desktop sits closer. Skeletal books (live
+    // quiet hours): the close-up of the queue IS the composition — frame the
+    // occupied cluster itself and let the rows become countable bricks.
+    // Hysteresis so the regime change is one slow camera breath, not a
+    // flicker; the spring makes it presentation either way.
+    if (this.skeletal) {
+      if (this.touchLevels >= 10) this.skeletal = false;
+    } else if (this.touchLevels < 8) {
+      this.skeletal = true;
+    }
+    const spreadTicks = f32[Header.SpreadTicks];
+    const spanHint = f32[Header.SpanHintTicks];
+    const denseProfile =
       p.layout === 1
         ? { frac: 0.62, minPpt: 2.2, maxPpt: 10 }
         : { frac: 0.76, minPpt: 4.5, maxPpt: 14 };
-    this.camera.follow(mid, f32[Header.SpanHintTicks], f32[Header.SpreadTicks], cssH, profile);
+    let profile = denseProfile;
+    let halfSpan = spanHint;
+    // A crossed book (external transient) has no meaningful touch cluster to
+    // frame — a close-up on its phantom mid frames pure void. Dense
+    // standpoint only until it uncrosses.
+    if (this.skeletal && spreadTicks > 0) {
+      // Frame the occupied cluster itself — but the close-up may only ever
+      // stand CLOSER than the dense standpoint (a skeletal book whose few
+      // levels still fill the near band keeps today's exact framing). The
+      // touch cap inside the camera still guarantees both bests fit.
+      const close =
+        p.layout === 1
+          ? { frac: 0.45, minPpt: 2.2, maxPpt: 22 }
+          : { frac: 0.5, minPpt: 4.5, maxPpt: 32 };
+      const nearHalf = Math.max(this.occupiedHalfSpanTicks * 1.1, spreadTicks * 0.8, 6);
+      // Mirror of camera.follow's fit — evaluated for both standpoints so
+      // the tighter one wins.
+      const fit = (frac: number, min: number, max: number, half: number) =>
+        Math.min(Math.max((cssH * frac) / Math.max(half * 2, 12), min), max);
+      const pptDense = fit(denseProfile.frac, denseProfile.minPpt, denseProfile.maxPpt, spanHint);
+      const pptClose = fit(close.frac, close.minPpt, close.maxPpt, nearHalf);
+      if (pptClose > pptDense) {
+        profile = close;
+        halfSpan = nearHalf;
+      }
+    }
+    this.camera.follow(mid, halfSpan, spreadTicks, cssH, profile);
     this.camera.update(dtMs, nowMs, reduced);
 
     // Length scale, eased so a shifting distribution rescales gently (scale
@@ -168,6 +218,15 @@ export class Renderer {
     if (p.layout === 1) {
       const p80Level = Math.max(f32[Header.CoreLevelP80Sats], 200_000);
       targetPxPerSat = (cssW * 0.62) / p80Level;
+    } else if (profile !== denseProfile) {
+      // Skeletal close-up: the vertical zoom committed to the queue, so the
+      // horizontal scale must follow — a typical touch row reaches ~42% of
+      // the frame from the seam instead of floating as a 100px pill. Same
+      // truth-sanctioned length lens, wider aperture; never below the dense
+      // scale.
+      const p80Level = Math.max(f32[Header.CoreLevelP80Sats], 200_000);
+      const coreMedian = Math.max(frame.meta.stats.coreMedianSats, 50_000);
+      targetPxPerSat = Math.max((cssW * 0.42) / p80Level, 26 / coreMedian);
     } else {
       const coreMedian = Math.max(frame.meta.stats.coreMedianSats, 50_000);
       targetPxPerSat = 26 / coreMedian;
@@ -191,22 +250,37 @@ export class Renderer {
       centerTick: p.centerTick, pxPerTick: p.pxPerTick, pxPerSat: p.pxPerSat,
       seamX: p.seamX, layout: p.layout, minCellPx: 1.5, maxCellPx: cssW * 1.25, dim,
       reduced,
+      centerYPx: cssH * (p.centerYFrac ?? 0.5),
+      dpr: this.dpr,
+      bandTopPx: p.layout === 1 ? 18 : 22,
+      bandBottomPx: p.layout === 1 ? 58 : 46,
     });
 
     // The membrane: a faint luminous band whose height IS the spread —
     // breathing made barely visible. Skipped when the touch is off-frame.
-    if (this.bestBid > 0 && this.bestAsk > 0 && !reduced) {
+    // Drawn in reduced motion too: a static band whose height only changes
+    // with data is not motion, and it is the composition's anchor.
+    // Presence adapts to voidness — on a skeletal book it is the one mark
+    // holding the frame; on the spine it spans the full-width rows.
+    if (this.bestBid > 0 && this.bestAsk > 0) {
       const midY = tickToY((this.bestBid + this.bestAsk) / 2, p);
       if (midY > -50 && midY < cssH + 50) {
         const halfH = Math.max((f32[Header.SpreadTicks] * p.pxPerTick) / 2, 3);
+        const membraneAlpha = p.layout === 1 ? 0.10 : this.skeletal ? 0.11 : 0.09;
+        const falloff = p.layout === 1 ? 0.4 : this.skeletal ? 1.2 : 1.6;
         this.postFx.membrane(cssW, cssH, midY, Math.min(halfH, cssH * 0.3),
-          p.layout === 0 ? p.seamX : cssW * 0.5, 0.05);
+          p.layout === 0 ? p.seamX : cssW * 0.5, membraneAlpha, falloff,
+          p.layout === 0 ? 1 : 0);
       }
     }
 
     this.advanceSprites(nowMs);
     this.spritesGl.draw(this.sprites, cssW, cssH);
-    this.postFx.vignette(0.22);
+    // Aspect-corrected; the spine's ellipse dims the top/bottom thirds so
+    // mid-depth whale rows yield to the touch — hierarchy by light, never by
+    // falsifying length.
+    if (p.layout === 1) this.postFx.vignette(0.28, cssW, cssH, 0.85, 1.2);
+    else this.postFx.vignette(0.3, cssW, cssH, 1, 1);
     this.overlay.draw(p, this.bestBid, this.bestAsk, 2, this.delegate.chromeAlpha());
   }
 
@@ -243,9 +317,12 @@ export class Renderer {
       } else if (!reduced) {
         const dir = p.layout === 1 ? 1 : event.side === Side.Bid ? -1 : 1;
         const x = p.seamX + dir * (event.aheadSats + event.sats / 2) * this.pxPerSat;
+        // Footprint tied to the dead order's real on-screen length — the old
+        // +4px floor made dust cancels puff far larger than the cell that
+        // vanished.
         this.sprites.push({
           xPx: x, yPx: y,
-          sizePx: Math.min(4 + event.sats * this.pxPerSat * 0.4, 14),
+          sizePx: Math.max(3, Math.min(event.sats * this.pxPerSat, 14)),
           age01: 0,
           kind: SpriteKind.Ghost,
           tint: event.side === Side.Bid ? 0 : 1,
@@ -254,6 +331,64 @@ export class Renderer {
       }
     }
     if (this.sprites.length > 480) this.sprites.splice(0, this.sprites.length - 480);
+  }
+
+  /**
+   * Camera-framing statistics read off the transferred frame: how many
+   * occupied levels sit within the near band of the touch, and how far the
+   * farthest of them reaches. Purely a standpoint input (presentation) —
+   * every number is already in the frame; nothing is invented. Instances
+   * are packed per side touch-outward, so distinct ticks arrive in
+   * distance order and each side's scan can stop at the band edge; levels
+   * beyond the band never widen the close-up (they are the far
+   * constellation, left to the viewer's own zoom-out).
+   */
+  private measureOccupancy(f32: Float32Array): void {
+    const count = f32[Header.InstanceCount];
+    const mid = f32[Header.MidTick];
+    if (mid === 0 || count === 0) return; // keep the last regime while seeding
+    const band = Math.max(4 * f32[Header.SpreadTicks], 30);
+    let nearBid = 0, nearAsk = 0;
+    let bidFirst = 0, bidDeep = 0, askFirst = 0, askDeep = 0;
+    let lastBidTick = NaN, lastAskTick = NaN;
+    let bidBeyond = false;
+    for (let i = 0; i < count; i++) {
+      const base = FRAME_HEADER_FLOATS + i * FRAME_STRIDE;
+      const tick = f32[base];
+      if (f32[base + 3] < 0.5) {
+        if (bidBeyond || tick === lastBidTick) continue;
+        lastBidTick = tick;
+        const dist = mid - tick;
+        if (dist <= band) {
+          nearBid++;
+          if (nearBid === 1) bidFirst = dist;
+          if (nearBid <= 3) bidDeep = dist;
+        } else {
+          bidBeyond = true; // bids descend; nothing nearer follows
+        }
+      } else {
+        if (tick === lastAskTick) continue;
+        lastAskTick = tick;
+        const dist = tick - mid;
+        if (dist <= band) {
+          nearAsk++;
+          if (nearAsk === 1) askFirst = dist;
+          if (nearAsk <= 3) askDeep = dist;
+        } else {
+          break; // asks ascend; nothing nearer follows
+        }
+      }
+    }
+    this.touchLevels = nearBid + nearAsk;
+    // Each side contributes its queue FRONT plus breathing room: up to the
+    // 3rd in-band level, but never chasing one more than ~8 ticks past the
+    // best — the touch is the subject; an in-band stray is already the far
+    // constellation and may fall off the close-up (only the bests are
+    // guaranteed in frame, by the camera's touch cap).
+    this.occupiedHalfSpanTicks = Math.max(
+      Math.min(bidDeep, bidFirst + 8),
+      Math.min(askDeep, askFirst + 8),
+    );
   }
 
   private advanceSprites(nowMs: number): void {

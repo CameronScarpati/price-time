@@ -14,14 +14,18 @@ export interface LayoutParams {
   pxPerSat: number;
   seamX: number;
   layout: 0 | 1; // 0 seam, 1 spine
+  /** Vertical fraction where the center tick sits: 0.5 on the seam; the
+   * spine lifts it to the portrait optical center (provenance + safe area
+   * occupy the bottom). Must stay in lockstep with cells.ts's uCenterYPx. */
+  centerYFrac?: number;
 }
 
 export function tickToY(tick: number, p: LayoutParams): number {
-  return (p.centerTick - tick) * p.pxPerTick + p.viewH / 2;
+  return (p.centerTick - tick) * p.pxPerTick + p.viewH * (p.centerYFrac ?? 0.5);
 }
 
 export function yToTick(y: number, p: LayoutParams): number {
-  return Math.round(p.centerTick - (y - p.viewH / 2) / p.pxPerTick);
+  return Math.round(p.centerTick - (y - p.viewH * (p.centerYFrac ?? 0.5)) / p.pxPerTick);
 }
 
 /** Screen x of the front of a side's queue (where fills strike). */

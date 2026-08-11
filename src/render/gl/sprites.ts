@@ -83,20 +83,27 @@ void main() {
   float fade = 1.0 - vAge;
   vec3 color; float a;
   if (vKind == 0.0) {
-    // Heat streak: fast attack, long exponential cool-down. Warmth is
-    // strongest at the strike end and washes out along the row; overlapping
-    // streaks from a burst sum into sustained glow rather than strobing.
+    // Heat streak: fast attack, long exponential cool-down. Real heat: a
+    // white-hot core at the strike point fringed in side-color at birth,
+    // sinking toward ember (amber → burnt orange, blue → deep sea) as it
+    // cools — same 950ms life, same envelope and position, only the
+    // temperature curve. Overlapping burst streaks sum into sustained glow.
     float along = clamp(0.5 - vLocal.x * vDir, 0.0, 1.0);   // 1 at strike end
     float lateral = exp(-vLocal.y * vLocal.y * 14.0);
     float attack = smoothstep(0.0, 0.06, vAge);
     float cool = exp(-vAge * 3.2);
     float body = along * along * lateral;
-    color = mix(tint, vec3(1.0), body * cool * 0.35);
-    a = body * attack * cool * 0.42;
+    float heat = body * cool;
+    vec3 deepC = vTint > 1.5 ? LIQ * 0.55
+      : mix(vec3(0.05, 0.24, 0.46), vec3(0.55, 0.22, 0.05), vTint);
+    vec3 c = mix(deepC, tint, cool);
+    color = mix(c, vec3(1.0), heat * 0.75);
+    a = body * attack * cool * 0.5;
   } else if (vKind == 1.0) {
-    // Cancel ghost: a faint puff where a quote died — small, brief, cool.
-    float r = length(vec2(vLocal.x, vLocal.y * 1.6)) * 2.0;
-    float puff = smoothstep(0.9, 0.0, r);
+    // Cancel ghost: a row-aligned sliver where a quote died — the shape of
+    // the cell that vanished, never a floating out-of-focus blob.
+    float r = length(vec2(vLocal.x, vLocal.y * 3.4)) * 2.0;
+    float puff = smoothstep(0.72, 0.10, r);
     color = tint;
     a = puff * fade * 0.1;
   } else {

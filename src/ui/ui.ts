@@ -21,6 +21,16 @@ const MODE_LABEL: Record<string, string> = {
   replay: "replay — recorded Bitstamp BTC/USD flow → local matching engine",
 };
 
+// The disclosure line is the piece's one standing sentence; on a phone the
+// desktop copy ellipsizes mid-word, so narrow screens get a short form with
+// the mode word still first (the label-leads rule is untouched).
+const MODE_LABEL_SHORT: Record<string, string> = {
+  live: "live — Bitstamp BTC/USD → local engine",
+  synthetic: "simulated — seeded from the last real book",
+  "synthetic-cold": "simulated — synthetic agents",
+  replay: "replay — recorded Bitstamp BTC/USD flow",
+};
+
 const el = <K extends keyof HTMLElementTagNameMap>(
   tag: K, className: string, parent: HTMLElement, text = "",
 ): HTMLElementTagNameMap[K] => {
@@ -41,6 +51,7 @@ export class Ui {
   private inspectToken = 0;
   private mode = "";
   private reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  private readonly narrow = matchMedia("(max-width: 480px)");
 
   private readonly provenance: HTMLElement;
   private readonly modeDot: HTMLElement;
@@ -74,7 +85,8 @@ export class Ui {
     this.clockChip = el("span", "clock-chip", this.controls, "live");
     this.pauseButton = el("button", "control-button", this.controls, "pause");
     this.pauseButton.addEventListener("click", () => this.togglePause());
-    const explainButton = el("button", "control-button", this.controls, "what am I looking at?");
+    const explainButton = el("button", "control-button", this.controls,
+      this.narrow.matches ? "what is this?" : "what am I looking at?");
     explainButton.addEventListener("click", () => this.toggleExplainer(true));
     el("span", "credit", this.controls, "a piece by Cameron Scarpati · data: Bitstamp");
 
@@ -131,7 +143,8 @@ export class Ui {
       meta.mode === "synthetic" && !meta.seededFromLive ? "synthetic-cold" : meta.mode;
     if (modeKey !== this.mode) {
       this.mode = modeKey;
-      this.modeText.textContent = " " + (MODE_LABEL[modeKey] ?? meta.mode);
+      const labels = this.narrow.matches ? MODE_LABEL_SHORT : MODE_LABEL;
+      this.modeText.textContent = " " + (labels[modeKey] ?? meta.mode);
       this.modeDot.dataset.mode = meta.mode;
     }
     this.modeDot.classList.toggle("degraded", meta.degraded);
@@ -263,8 +276,9 @@ export class Ui {
       el("span", t.aggressor === Side.Bid ? "tape-buy" : "tape-sell", row,
         t.aggressor === Side.Bid ? "▲" : "▼");
       el("span", "", row, ` $${formatDecimal(t.tick, 2)} `);
-      el("span", "inspector-dim", row,
-        `${formatDecimal(t.sats, 8).replace(/0+$/, "").replace(/\.$/, "")} BTC`);
+      // Fixed-width on purpose: trailing zeros are exact (sats are integers),
+      // and a right-flush mono column must not jog row to row.
+      el("span", "inspector-dim", row, `${formatDecimal(t.sats, 8)} BTC`);
     }
   }
 

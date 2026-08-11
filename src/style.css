@@ -39,6 +39,18 @@ html, body {
   text-overflow: ellipsis;
 }
 
+/* The disclosure line must never be the thing that gets cut: narrow screens
+ * get a short-form label (ui.ts) and, belt-and-braces, a two-line wrap. */
+@media (max-width: 480px) {
+  .provenance {
+    white-space: normal;
+    text-align: center;
+    line-height: 1.35;
+    overflow: visible;
+    text-overflow: clip;
+  }
+}
+
 .mode-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 2px; background: #94a3b8; vertical-align: 1px; }
 .mode-dot[data-mode="live"] { background: #34d399; border-radius: 50%; }
 .mode-dot[data-mode="synthetic"] { background: #c084fc; border-radius: 1px; transform: rotate(45deg); }
@@ -86,6 +98,29 @@ html, body {
 .clock-chip[data-state="paused"] { color: #60a5fa; border-color: rgba(96, 165, 250, 0.4); }
 
 .credit { font-size: 11px; color: rgba(148, 163, 184, 0.6); margin-left: 6px; }
+
+/* A 390px screen cannot center a ~525px nowrap row: let the chrome wrap and
+ * drop the byline (it lives in the explainer's credits) instead of clipping
+ * it off both edges. */
+@media (max-width: 600px) {
+  .controls {
+    left: 12px;
+    right: 12px;
+    transform: none;
+    flex-wrap: wrap;
+    justify-content: center;
+    row-gap: 6px;
+    white-space: normal;
+  }
+  .credit { display: none; }
+  .caption {
+    white-space: normal;
+    text-align: center;
+    max-width: 88vw;
+    overflow: visible;
+    text-overflow: clip;
+  }
+}
 
 /* The way back after panning away — visible whenever the camera is detached. */
 .follow-chip {
@@ -152,6 +187,9 @@ html, body {
   font-size: 11.5px;
   max-height: 40vh;
   overflow: hidden;
+  /* An overflowing last row fades instead of shearing mid-glyph. */
+  -webkit-mask-image: linear-gradient(#000 calc(100% - 14px), transparent);
+  mask-image: linear-gradient(#000 calc(100% - 14px), transparent);
 }
 .tape-title { color: rgba(148, 163, 184, 0.7); font-size: 10.5px; letter-spacing: 0.08em; margin-bottom: 4px; }
 .tape-row { display: flex; gap: 4px; align-items: baseline; }
