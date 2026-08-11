@@ -1,19 +1,20 @@
 import { createProgram } from "./context";
 
 /**
- * Full-screen passes:
+ * The two non-field passes, built for fill-rate discipline on 3x phones:
  *
- * - ROOM: a static radial lift behind everything — the field reads as a lit
- *   space instead of a dead buffer. Zero motion, dithered against OLED
- *   banding; truth-legal the same way the vignette is.
+ * - BACKDROP: room gradient and vignette combined into ONE opaque fullscreen
+ *   draw that also replaces the clear — what used to be clear + two blended
+ *   fullscreen passes is a single unblended write. Static by design.
  * - MEMBRANE: a faint luminous band inside the spread gap, whose height IS
- *   the spread — the market's breathing, made barely visible. Data-driven
- *   height; the core+halo profile and temperature are presentation.
- * - VIGNETTE: a static darkening toward the edges; not motion, just a room.
+ *   the spread — the market's breathing, made barely visible. Scissored to
+ *   its band so its fragments never touch (or tint) the rest of the frame,
+ *   and faded to true zero horizontally so it can never read as a beam
+ *   shooting past the rows it belongs to.
  *
- * (A whole-field phosphor FADE pass shipped briefly and was removed: at real
- * OLED contrast it read as afterimage smearing. Decay belongs to discrete
- * event sprites, never to the field.)
+ * (Two lineage notes, both owner-verified on hardware: a whole-field phosphor
+ * FADE pass was removed — afterimage smearing; and the spine membrane once
+ * spanned the full screen width — it read as a stray laser.)
  */
 
 const VS = `#version 300 es
@@ -30,14 +31,14 @@ const FS = `#version 300 es
 precision highp float;
 in vec2 vUv;
 uniform int uMode;
-uniform vec4 uColor;      // alpha channel carries the pass strength
 uniform vec2 uViewPx;
+uniform float uAlpha;
 uniform float uMidYPx;
 uniform float uHalfHPx;   // membrane half-height (spread/2 in px, clamped)
-uniform float uSeamXPx;
+uniform float uSeamXPx;   // membrane horizontal anchor
 uniform float uFalloff;   // membrane horizontal gaussian width
-uniform float uEdgeWin;   // 1 = force the band to true zero before the edge
 uniform vec2 uShape;      // vignette ellipse shape (spine weights top/bottom)
+uniform float uVignette;
 out vec4 outColor;
 
 // 1-LSB hash dither: near-black gradients band on 8-bit OLED without it.
@@ -47,47 +48,37 @@ float hash(vec2 p) {
 
 void main() {
   if (uMode == 0) {
-    outColor = uColor;                       // flat wash (mode transitions)
-  } else if (uMode == 1) {
+    // Backdrop: #0E141B at center easing to #080B0F at the corners, with the
+    // vignette folded into the same radial term. One opaque write.
+    vec2 q = (vUv - 0.5) * vec2(uViewPx.x / uViewPx.y, 1.0);
+    float d = length(q);
+    vec3 bg = mix(vec3(0.055, 0.078, 0.106), vec3(0.031, 0.043, 0.059),
+      smoothstep(0.15, 0.9, d));
+    float v = smoothstep(0.35, 1.05, length(q * uShape)) * uVignette;
+    outColor = vec4(bg * (1.0 - v) + vec3((hash(gl_FragCoord.xy) - 0.5) / 255.0), 1.0);
+  } else {
     // The membrane: light escaping the seam between the two liquidity
     // fields. Core+halo so there is a highlight to catch the eye, not one
     // wide smear; temperature borrowed from the sides it separates (warm
     // toward the asks above, cool toward the bids below — no third hue).
-    // px.y is top-down to match tickToY's convention (vUv.y is bottom-up:
-    // the fullscreen triangle lives in clip space) — with the spine's
-    // off-center mid, a flipped y draws the band mirrored about center.
+    // px.y is top-down to match tickToY's convention (vUv.y is bottom-up).
     vec2 px = vec2(vUv.x, 1.0 - vUv.y) * uViewPx;
     float dy = (px.y - uMidYPx) / max(uHalfHPx, 2.0);
     float dx = abs(px.x - uSeamXPx) / (uViewPx.x * 0.5);
     float core = exp(-dy * dy * 3.0);
     float halo = exp(-dy * dy * 0.35);
-    float band = (0.7 * core + 0.3 * halo) * exp(-dx * dx * uFalloff);
-    // Seam layout: die to true zero well before the frame edge — a 1-LSB
-    // edge-to-edge tint reads as screen grime. The spine's band is meant to
-    // span the full-width rows, so it skips the window (dither covers it).
-    band *= mix(1.0, smoothstep(0.95, 0.45, dx), uEdgeWin);
+    // Dies to TRUE zero before the frame edge, every layout: an edge-to-edge
+    // 1-LSB tint reads as screen grime, and a band running past the rows it
+    // belongs to reads as a beam.
+    float band = (0.7 * core + 0.3 * halo) * exp(-dx * dx * uFalloff)
+      * smoothstep(1.1, 0.5, dx);
     vec3 warm = vec3(0.98, 0.82, 0.60);
     vec3 cool = vec3(0.50, 0.72, 0.95);
     vec3 glow = mix(cool, warm,
       clamp(0.5 + (uMidYPx - px.y) / max(uHalfHPx * 4.0, 8.0), 0.0, 1.0));
-    float a = band * uColor.a;
+    float a = band * uAlpha;
     a = max(a + (hash(gl_FragCoord.xy) - 0.5) / 255.0, 0.0);
     outColor = vec4(glow * a, a);            // premultiplied additive
-  } else if (uMode == 2) {
-    // Vignette: aspect-corrected so the falloff is circular on any frame
-    // (raw UV distance squashed it on wide desktops), ellipse-shaped on the
-    // spine so periphery whale rows yield to the touch.
-    vec2 q = (vUv - 0.5) * vec2(uViewPx.x / uViewPx.y, 1.0) * uShape;
-    float d = length(q);
-    float v = smoothstep(0.35, 1.05, d) * uColor.a;
-    outColor = vec4(vec3(1.0 - v), 1.0);     // multiplicative darkening
-  } else {
-    // The room: #0E141B at center easing to #080B0F at the corners. Static.
-    vec2 q = (vUv - 0.5) * vec2(uViewPx.x / uViewPx.y, 1.0);
-    float d = length(q);
-    vec3 bg = mix(vec3(0.055, 0.078, 0.106), vec3(0.031, 0.043, 0.059),
-      smoothstep(0.15, 0.9, d));
-    outColor = vec4(bg + vec3((hash(gl_FragCoord.xy) - 0.5) / 255.0), 1.0);
   }
 }`;
 
@@ -110,52 +101,59 @@ export class PostPipeline {
     gl.bindVertexArray(null);
     this.u = {};
     for (const name of [
-      "uMode", "uColor", "uViewPx", "uMidYPx", "uHalfHPx", "uSeamXPx",
-      "uFalloff", "uEdgeWin", "uShape",
+      "uMode", "uViewPx", "uAlpha", "uMidYPx", "uHalfHPx", "uSeamXPx",
+      "uFalloff", "uShape", "uVignette",
     ]) {
       this.u[name] = gl.getUniformLocation(this.program, name)!;
     }
   }
 
-  private draw(mode: number, color: [number, number, number, number], extra?: {
-    viewW: number; viewH: number; midY?: number; halfH?: number; seamX?: number;
-    falloff?: number; edgeWin?: number; shapeX?: number; shapeY?: number;
-  }): void {
+  /** Opaque room + vignette; replaces the frame clear entirely. */
+  backdrop(viewW: number, viewH: number, vignette: number, shapeX: number, shapeY: number): void {
     const gl = this.gl;
     gl.useProgram(this.program);
     gl.bindVertexArray(this.vao);
-    gl.uniform1i(this.u.uMode, mode);
-    gl.uniform4f(this.u.uColor, ...color);
-    if (extra) {
-      gl.uniform2f(this.u.uViewPx, extra.viewW, extra.viewH);
-      gl.uniform1f(this.u.uMidYPx, extra.midY ?? 0);
-      gl.uniform1f(this.u.uHalfHPx, extra.halfH ?? 0);
-      gl.uniform1f(this.u.uSeamXPx, extra.seamX ?? 0);
-      gl.uniform1f(this.u.uFalloff, extra.falloff ?? 2.2);
-      gl.uniform1f(this.u.uEdgeWin, extra.edgeWin ?? 1);
-      gl.uniform2f(this.u.uShape, extra.shapeX ?? 1, extra.shapeY ?? 1);
-    }
-    gl.enable(gl.BLEND);
+    gl.uniform1i(this.u.uMode, 0);
+    gl.uniform2f(this.u.uViewPx, viewW, viewH);
+    gl.uniform1f(this.u.uVignette, vignette);
+    gl.uniform2f(this.u.uShape, shapeX, shapeY);
+    gl.disable(gl.BLEND);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.bindVertexArray(null);
   }
 
-  /** Static background lift; overwrites, so call right after clear. */
-  room(viewW: number, viewH: number): void {
-    this.gl.blendFunc(this.gl.ONE, this.gl.ZERO);
-    this.draw(3, [0, 0, 0, 1], { viewW, viewH });
-  }
-
+  /** The spread's light. Scissored: fragments outside the band cost nothing
+   * and can tint nothing. `dpr` converts CSS-space bounds to device pixels
+   * (scissor works in device space, y up from the bottom). */
   membrane(
     viewW: number, viewH: number, midY: number, halfH: number, seamX: number,
-    alpha: number, falloff: number, edgeWin: number,
+    alpha: number, falloff: number, dpr: number,
   ): void {
-    this.gl.blendFunc(this.gl.ONE, this.gl.ONE_MINUS_SRC_ALPHA);
-    this.draw(1, [0, 0, 0, alpha], { viewW, viewH, midY, halfH, seamX, falloff, edgeWin });
-  }
-
-  vignette(strength: number, viewW: number, viewH: number, shapeX: number, shapeY: number): void {
-    this.gl.blendFunc(this.gl.ZERO, this.gl.SRC_COLOR);
-    this.draw(2, [0, 0, 0, strength], { viewW, viewH, shapeX, shapeY });
+    const gl = this.gl;
+    const bandCss = Math.min(halfH * 6 + 24, viewH);
+    const yTopCss = Math.max(midY - bandCss, 0);
+    const yBottomCss = Math.min(midY + bandCss, viewH);
+    if (yBottomCss <= yTopCss) return;
+    gl.enable(gl.SCISSOR_TEST);
+    gl.scissor(
+      0,
+      Math.floor((viewH - yBottomCss) * dpr),
+      Math.ceil(viewW * dpr),
+      Math.ceil((yBottomCss - yTopCss) * dpr),
+    );
+    gl.useProgram(this.program);
+    gl.bindVertexArray(this.vao);
+    gl.uniform1i(this.u.uMode, 1);
+    gl.uniform2f(this.u.uViewPx, viewW, viewH);
+    gl.uniform1f(this.u.uAlpha, alpha);
+    gl.uniform1f(this.u.uMidYPx, midY);
+    gl.uniform1f(this.u.uHalfHPx, halfH);
+    gl.uniform1f(this.u.uSeamXPx, seamX);
+    gl.uniform1f(this.u.uFalloff, falloff);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.bindVertexArray(null);
+    gl.disable(gl.SCISSOR_TEST);
   }
 }

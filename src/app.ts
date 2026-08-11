@@ -123,8 +123,16 @@ function boot(): void {
     pinchDist = 0;
   });
 
+  // Render at ≤60fps even on 120Hz ProMotion displays: this content is a
+  // mostly-still field with discrete events, and halving the fill-rate bill
+  // on a 3x-resolution phone buys battery and thermal headroom that matter
+  // more than 120Hz smoothness ever could here.
+  let lastRenderMs = 0;
   const frame = (t: number): void => {
-    renderer.tick(t);
+    if (t - lastRenderMs >= 15.5) {
+      lastRenderMs = t;
+      renderer.tick(t);
+    }
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);

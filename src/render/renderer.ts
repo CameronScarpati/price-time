@@ -10,8 +10,6 @@ import { SpriteKind, SpritePipeline, type Sprite } from "./gl/sprites";
 import { tickToY, type LayoutParams } from "./layout";
 import { Overlay } from "./overlay";
 
-const BG: [number, number, number] = [0.039, 0.055, 0.07];
-
 /**
  * The main-thread renderer: draws the worker's latest frame, owns every
  * presentation clock (camera springs, flash decays, stagger offsets, the
@@ -74,7 +72,9 @@ export class Renderer {
     private readonly worker: Worker,
     private readonly delegate: RendererDelegate,
   ) {
-    const gl = canvas.getContext("webgl2", { antialias: false, alpha: false });
+    const gl = canvas.getContext("webgl2", {
+      antialias: false, alpha: false, powerPreference: "high-performance",
+    });
     if (gl === null) throw new Error("WebGL2 unavailable");
     this.gl = gl;
     this.cells = new CellPipeline(gl);
@@ -133,16 +133,16 @@ export class Renderer {
     }
 
     const frame = this.latest;
-    const gl = this.gl;
     const reduced = this.delegate.reducedMotion();
-    // Hard clear every frame. A whole-field phosphor wash shipped briefly and
-    // read as afterimage smearing at real OLED contrast — decay belongs to
-    // discrete event sprites only, never to the field itself.
-    gl.clearColor(BG[0], BG[1], BG[2], 1);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    // The room: a static radial lift so the field reads as a lit space, not
-    // a dead buffer. Zero motion — same grammar as the vignette.
-    this.postFx.room(this.layoutParams.viewW, this.layoutParams.viewH);
+    // One opaque backdrop draw replaces clear + room + vignette: room
+    // gradient and vignette are the same static radial math, and on a 3x
+    // 120Hz phone every saved fullscreen pass is real battery. (No phosphor,
+    // no persistence — the field is crisp by hard rule; see visual-craft.)
+    const isSpine = this.layoutParams.viewW / this.layoutParams.viewH < 0.8;
+    this.postFx.backdrop(
+      this.layoutParams.viewW, this.layoutParams.viewH,
+      isSpine ? 0.28 : 0.3, isSpine ? 0.85 : 1, isSpine ? 1.2 : 1,
+    );
     if (frame === null) return;
     if (!frame.consumed) {
       frame.consumed = true;
@@ -261,28 +261,22 @@ export class Renderer {
     // The membrane: a faint luminous band whose height IS the spread —
     // breathing made barely visible. Skipped when the touch is off-frame.
     // Drawn in reduced motion too: a static band whose height only changes
-    // with data is not motion, and it is the composition's anchor.
-    // Presence adapts to voidness — on a skeletal book it is the one mark
-    // holding the frame; on the spine it spans the full-width rows.
+    // with data is not motion, and it is the composition's anchor. On the
+    // spine it anchors LEFT, where the rows live — a full-width band once
+    // shot past the bars and read as a stray beam of light.
     if (this.bestBid > 0 && this.bestAsk > 0) {
       const midY = tickToY((this.bestBid + this.bestAsk) / 2, p);
       if (midY > -50 && midY < cssH + 50) {
         const halfH = Math.max((f32[Header.SpreadTicks] * p.pxPerTick) / 2, 3);
         const membraneAlpha = p.layout === 1 ? 0.10 : this.skeletal ? 0.11 : 0.09;
-        const falloff = p.layout === 1 ? 0.4 : this.skeletal ? 1.2 : 1.6;
+        const falloff = p.layout === 1 ? 1.4 : this.skeletal ? 1.2 : 1.6;
         this.postFx.membrane(cssW, cssH, midY, Math.min(halfH, cssH * 0.3),
-          p.layout === 0 ? p.seamX : cssW * 0.5, membraneAlpha, falloff,
-          p.layout === 0 ? 1 : 0);
+          p.layout === 0 ? p.seamX : cssW * 0.28, membraneAlpha, falloff, this.dpr);
       }
     }
 
     this.advanceSprites(nowMs);
     this.spritesGl.draw(this.sprites, cssW, cssH);
-    // Aspect-corrected; the spine's ellipse dims the top/bottom thirds so
-    // mid-depth whale rows yield to the touch — hierarchy by light, never by
-    // falsifying length.
-    if (p.layout === 1) this.postFx.vignette(0.28, cssW, cssH, 0.85, 1.2);
-    else this.postFx.vignette(0.3, cssW, cssH, 1, 1);
     this.overlay.draw(p, this.bestBid, this.bestAsk, 2, this.delegate.chromeAlpha());
   }
 

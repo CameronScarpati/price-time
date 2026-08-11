@@ -28,11 +28,6 @@ export function yToTick(y: number, p: LayoutParams): number {
   return Math.round(p.centerTick - (y - p.viewH * (p.centerYFrac ?? 0.5)) / p.pxPerTick);
 }
 
-/** Screen x of the front of a side's queue (where fills strike). */
-export function frontX(side: Side, p: LayoutParams): number {
-  return p.layout === 0 ? p.seamX : p.seamX;
-}
-
 export function hitTest(
   x: number, y: number, p: LayoutParams, bestBid: number, bestAsk: number,
 ): { side: Side; tick: number; cumSats: number } | null {
