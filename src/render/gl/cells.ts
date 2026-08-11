@@ -34,17 +34,28 @@ uniform float uMinCellPx;
 uniform float uMaxCellPx;
 uniform float uDim;         // mode-transition luminance dip, 0..1
 uniform float uReduced;     // prefers-reduced-motion
+uniform float uCenterYPx;   // screen y of the camera's center tick
+uniform float uDpr;         // device pixel ratio, for separator snapping
 
 out vec4 vColor;
 out vec2 vUv;
 out vec2 vSizePx;
+out float vClamped;
+out float vYPx;
 
 const vec3 BID = vec3(0.263, 0.686, 0.961);  // blue — never red/green
 const vec3 ASK = vec3(1.0, 0.667, 0.278);    // amber
 const vec3 LIQ = vec3(0.71, 0.49, 1.0);      // liquidation violet
+// Age anchors: arrivals lighten toward the hot tint, embers sink along a hue
+// path (amber → burnt sienna, blue → deep sea) instead of a grey lerp.
+// Luminance still monotonically encodes age; only the journey is richer.
+const vec3 BID_HOT = vec3(0.78, 0.92, 1.0);
+const vec3 ASK_HOT = vec3(1.0, 0.90, 0.70);
+const vec3 BID_EMBER = vec3(0.10, 0.24, 0.42);
+const vec3 ASK_EMBER = vec3(0.45, 0.25, 0.10);
 
 void main() {
-  float y = (uCenterTick - aTick) * uPxPerTick + uViewPx.y * 0.5;
+  float y = (uCenterTick - aTick) * uPxPerTick + uCenterYPx;
   // Row height: a 1px breathing gap between adjacent ticks while zoomed in;
   // at deep zoom-out rows go sub-pixel and neighbours merge into solid depth
   // (the honest L3→L2 melt), so no fattening below ~3px/tick.
@@ -68,19 +79,32 @@ void main() {
   float inset = min(0.5, len * 0.25);
   float xA = x0 + dir * inset;
   float xB = x0 + dir * (len - inset);
+  // Snap both ends to the device grid: the 1px optical separators between
+  // queue neighbours otherwise render anywhere from 1 to 2+ device pixels
+  // depending on subpixel phase — machined, not hand-cut. A ≤0.5-device-px
+  // snap changes no ordering or magnitude a viewer could read.
+  xA = floor(xA * uDpr + 0.5) / uDpr;
+  xB = floor(xB * uDpr + 0.5) / uDpr;
+  // Dust must stay visible: never snap a cell to zero width.
+  if (xA == xB) xB = xA + dir / uDpr;
   float x = mix(xA, xB, aCorner.x);
   float py = (y - rowH * 0.5) + aCorner.y * rowH;
   gl_Position = vec4(x / uViewPx.x * 2.0 - 1.0, 1.0 - py / uViewPx.y * 2.0, 0.0, 1.0);
   vUv = aCorner;
   vSizePx = vec2(abs(xB - xA), rowH);
+  vClamped = step(uMaxCellPx, aSats * uPxPerSat);
+  vYPx = py;
 
   vec3 base = aFlags > 0.5 ? LIQ : mix(BID, ASK, aSide);
-  // Waiting made visible: arrive bright, settle by ~8s, dim to ember by ~10min.
-  // Arrival lightens toward white (hue preserved); age multiplies down.
+  // Waiting made visible: arrive bright, settle by ~8s, dim to ember by
+  // ~10min. Envelopes unchanged; they now travel the per-side hue anchors
+  // (liquidation keeps neutral anchors so violet stays violet).
+  vec3 hot = aFlags > 0.5 ? vec3(1.0) : mix(BID_HOT, ASK_HOT, aSide);
+  vec3 emberC = aFlags > 0.5 ? LIQ * 0.4 : mix(BID_EMBER, ASK_EMBER, aSide);
   float settle = clamp(aAge / 8.0, 0.0, 1.0);
   float ember = clamp((aAge - 60.0) / 540.0, 0.0, 1.0);
   float flare = (uReduced > 0.5 ? 0.1 : 0.28) * (1.0 - settle);
-  vec3 color = mix(base, vec3(1.0), flare) * mix(1.0, 0.4, ember);
+  vec3 color = mix(mix(base, emberC, ember), hot, flare);
   float alpha = 0.92;
   if (uReduced < 0.5) alpha *= clamp(aAge / 0.12, 0.3, 1.0);
   vColor = vec4(color * (1.0 - uDim * 0.55), alpha);
@@ -91,13 +115,39 @@ precision mediump float;
 in vec4 vColor;
 in vec2 vUv;
 in vec2 vSizePx;
+in float vClamped;
+in float vYPx;
+// Chrome exclusion bands (px from top / from bottom): the picture plane
+// resolves to zero before the control band and the provenance line — a deep
+// row sheared by the viewport edge over the disclosure text reads as a bug,
+// and the disclosure must never be overprinted.
+uniform vec2 uBandPx;
+uniform float uViewHPx;
 out vec4 outColor;
 void main() {
   // A ~0.7px feather on every edge: soft-edged cells read calm; hard rects
-  // read like a spreadsheet. Sub-pixel cells keep full weight.
+  // read like a spreadsheet. No alpha floor — the old 0.25 floor terminated
+  // every cell in a quarter-strength ledge that read as a stroke. Sub-pixel
+  // rows are protected by the 1.5px length clamp and still keep ~0.5 weight.
   vec2 edgePx = min(vUv, 1.0 - vUv) * vSizePx;
-  float feather = clamp(min(edgePx.x, edgePx.y) / 0.7, 0.25, 1.0);
-  outColor = vec4(vColor.rgb, vColor.a * feather);
+  float feather = clamp(min(edgePx.x, edgePx.y) / 0.7, 0.0, 1.0);
+  // Luminous core: bright spine, darker skin — resting liquidity as lit
+  // material, not flat paint. Mix toward white for the core, multiply DOWN
+  // for the skin (never multiply >1 — clips amber to yellow-green). Rows
+  // under ~3px keep today's exact flat color so the honest deep-zoom
+  // L3→L2 melt is untouched.
+  float profileOn = smoothstep(2.0, 3.0, vSizePx.y);
+  float ny = abs(vUv.y - 0.5) * 2.0;
+  float coreW = 1.0 - ny * ny;
+  vec3 lit = mix(vColor.rgb * 0.80, mix(vColor.rgb, vec3(1.0), 0.16), coreW);
+  vec3 c = mix(vColor.rgb, lit, profileOn);
+  // Clamped whales fade over their far 18%: the length cap becomes legible
+  // ("continues beyond what is drawn") and the largest flat field stops
+  // dominating the frame's luminance budget. Unclamped cells are identical.
+  float tail = 1.0 - vClamped * smoothstep(0.82, 1.0, vUv.x) * 0.55;
+  float band = smoothstep(uBandPx.x - 26.0, uBandPx.x, vYPx) *
+               (1.0 - smoothstep(uViewHPx - uBandPx.y - 26.0, uViewHPx - uBandPx.y, vYPx));
+  outColor = vec4(c, vColor.a * feather * tail * band);
 }`;
 
 export interface CellUniforms {
@@ -112,6 +162,13 @@ export interface CellUniforms {
   maxCellPx: number;
   dim: number;
   reduced: boolean;
+  /** Screen y of the center tick (spine puts it at the optical center). */
+  centerYPx: number;
+  dpr: number;
+  /** Chrome exclusion: px from the top / bottom edge inside which the field
+   * fades to zero (control band, provenance line). */
+  bandTopPx: number;
+  bandBottomPx: number;
 }
 
 export class CellPipeline {
@@ -146,6 +203,7 @@ export class CellPipeline {
     for (const name of [
       "uViewPx", "uCenterTick", "uPxPerTick", "uPxPerSat", "uSeamX",
       "uLayout", "uMinCellPx", "uMaxCellPx", "uDim", "uReduced",
+      "uCenterYPx", "uDpr", "uBandPx", "uViewHPx",
     ]) {
       this.uniforms[name] = gl.getUniformLocation(this.program, name)!;
     }
@@ -178,6 +236,10 @@ export class CellPipeline {
     gl.uniform1f(this.uniforms.uMaxCellPx, u.maxCellPx);
     gl.uniform1f(this.uniforms.uDim, u.dim);
     gl.uniform1f(this.uniforms.uReduced, u.reduced ? 1 : 0);
+    gl.uniform1f(this.uniforms.uCenterYPx, u.centerYPx);
+    gl.uniform1f(this.uniforms.uDpr, u.dpr);
+    gl.uniform2f(this.uniforms.uBandPx, u.bandTopPx, u.bandBottomPx);
+    gl.uniform1f(this.uniforms.uViewHPx, u.viewH);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, instances);

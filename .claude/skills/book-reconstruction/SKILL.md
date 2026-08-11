@@ -43,6 +43,16 @@ do not add one.** Any "small" patch produces the silently-wrong book class.
 Same response to `bts:request_reconnect` and socket loss (after reconnect and
 resubscribe): full reseed. Reseeds are cheap (~1s); wrongness is not.
 
+## The sustained-cross healer
+
+A real venue book cannot REST crossed — internal crossings resolve in
+milliseconds. If the reconstructed book stays crossed (best bid ≥ best ask)
+for more than ~8 seconds in live mode, a phantom order survived somewhere and
+the pipeline forces `reseed("divergence")` without waiting for the 30s guard.
+Observed in the wild as a phantom bid ~80 ticks above the real market during
+a fast move; the composition collapses while the book is wrong, so healing
+fast matters visually as well as truthfully.
+
 ## Defense in depth: the divergence guard
 
 Every 30s in `flowing`, fetch the aggregated book (`group=1`) and compare local

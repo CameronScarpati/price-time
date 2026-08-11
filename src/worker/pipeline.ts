@@ -59,6 +59,7 @@ export class Pipeline {
   private liveDownSinceMs: number | null = null;
   private hidden = false;
   private syntheticSeededFromLive = false;
+  private crossedSinceMs: number | null = null;
 
   // Live-texture calibration for the synthetic understudy.
   private createTimes: number[] = [];
@@ -269,6 +270,26 @@ export class Pipeline {
     const dtMs = Math.min(nowMs - this.lastPumpMs, 250);
     this.lastPumpMs = nowMs;
     if (this.hidden) return;
+
+    // A real venue book cannot REST crossed — crossings resolve in
+    // milliseconds inside the matching engine. Our external book crossing
+    // for seconds means the reconstruction is wrong (a phantom order
+    // survived somewhere), and wrong books are discarded, never patched.
+    // This heals in ~8s what the 30s-cadence divergence guard would take up
+    // to a minute to catch.
+    if (this.mode === "live") {
+      const bid = this.engine.bestBid();
+      const ask = this.engine.bestAsk();
+      if (bid !== undefined && ask !== undefined && bid >= ask) {
+        this.crossedSinceMs ??= nowMs;
+        if (nowMs - this.crossedSinceMs > 8_000) {
+          this.crossedSinceMs = null;
+          this.live?.reseed("divergence");
+        }
+      } else {
+        this.crossedSinceMs = null;
+      }
+    }
 
     if (this.mode === "synthetic" && !this.paused && this.synthetic !== null) {
       this.synthCursorMicro += dtMs * 1000;
