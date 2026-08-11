@@ -31,6 +31,31 @@ export class Camera {
   private touchCapPpt = Infinity;
   private targetCenter = 0;
   private initialized = false;
+  private loTick = 0;
+  private hiTick = 0;
+  private viewH = 800;
+
+  /** Book extent from the frame header; 0/0 (no data) disables the clamp. */
+  setBounds(loTick: number, hiTick: number): void {
+    this.loTick = loTick;
+    this.hiTick = hiTick;
+  }
+
+  /** The viewer may wander a little past the last resting order — 15% of a
+   * screen of slack — and no further: beyond that is void in every
+   * direction, and below the deepest bid it is soon negative price space.
+   * When the whole extent fits the frame, the view pins to the book's
+   * middle. Presentation only: a clamp decides where you may stand, never
+   * what is there. */
+  private clampCenter(tick: number): number {
+    if (this.hiTick <= this.loTick) return tick;
+    const half = (this.viewH * 0.5) / this.pxPerTick;
+    const slack = (this.viewH * 0.15) / this.pxPerTick;
+    const lo = this.loTick - slack + half;
+    const hi = this.hiTick + slack - half;
+    if (lo >= hi) return (this.loTick + this.hiTick) / 2;
+    return Math.min(Math.max(tick, lo), hi);
+  }
 
   follow(
     midTick: number, halfSpanTicks: number, spreadTicks: number,
@@ -47,6 +72,7 @@ export class Camera {
     // Floor at 12 ticks so a skeletal book's close-up profile can actually
     // commit to the queue; dense profiles hit their maxPpt long before this
     // floor matters, so their framing is unchanged.
+    this.viewH = viewH;
     const span = Math.max(halfSpanTicks * 2, 12);
     let ppt = Math.min(Math.max((viewH * profile.frac) / span, profile.minPpt), profile.maxPpt);
     // |spread|: an externally crossed book carries a negative spread, and its
@@ -158,6 +184,9 @@ export class Camera {
     // stately when the auto framing recomposes.
     const tauScale = this.scaleHeld ? 180 : 700;
     this.pxPerTick += (targetPxPerTick - this.pxPerTick) * (1 - Math.exp(-dtMs / tauScale));
+    // Re-assert the book bounds every frame: zooming out at an extreme can
+    // push the edge past the extent even though every pan was clamped.
+    if (this.detached) this.centerTick = this.clampCenter(this.centerTick);
   }
   private lastSnapMs = 0;
   private glideStartMs = 0;
@@ -191,7 +220,7 @@ export class Camera {
   }
 
   panTicks(dTicks: number): void {
-    this.centerTick += dTicks;
+    this.centerTick = this.clampCenter(this.centerTick + dTicks);
     this.detached = true;
     this.glideDurMs = 0;
   }
@@ -215,7 +244,9 @@ export class Camera {
   }
 
   private planGlide(endTick: number, minDurMs: number, maxDurMs: number): void {
-    let end = endTick;
+    // A fling into the boundary eases onto it and stops — the clamp shortens
+    // the glide's distance, and the ease-out makes the arrival look meant.
+    let end = this.clampCenter(endTick);
     // Below ~3px/tick no row grid is discernible — snapping there would just
     // quantize a smooth glide for nothing.
     if (this.pxPerTick >= 3) end = Math.round(end);

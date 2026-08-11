@@ -44,6 +44,11 @@ export const Header = {
    * width scale, so a typical row spans most of a phone screen instead of
    * every order huddling at the left edge. */
   CoreLevelP80Sats: 8,
+  /** Extent of the resting book: lowest and highest occupied tick across
+   * both sides (0/0 while empty). The camera's pan clamp — the viewer may
+   * wander a little past the last order, never into the void beyond. */
+  LoTick: 9,
+  HiTick: 10,
 } as const;
 
 /** A discrete market event the renderer may animate (decay/stagger are the

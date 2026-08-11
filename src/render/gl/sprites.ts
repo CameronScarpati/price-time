@@ -49,6 +49,7 @@ layout(location=5) in float aKind;
 layout(location=6) in float aTint;
 uniform vec2 uViewPx;
 out vec2 vLocal;
+out vec2 vQuadPx;
 out float vAge;
 out float vKind;
 out float vTint;
@@ -57,18 +58,22 @@ void main() {
   float dir = aSize < 0.0 ? -1.0 : 1.0;
   vec2 corner;
   vec2 center = aPos;
+  vec2 quadPx;
   if (aKind == 0.0) {
     // Bite: a row-shaped quad over the vanished span. aPos.x is the span's
     // inner edge; the quad extends outward in the consumed direction.
-    corner = (aCorner - 0.5) * vec2(size, aH);
+    quadPx = vec2(size, aH);
+    corner = (aCorner - 0.5) * quadPx;
     center.x += dir * size * 0.5;
   } else {
     float grow = aKind == 2.0 ? (0.4 + aAge * 1.2) : 1.0;
-    corner = (aCorner - 0.5) * size * 2.2 * grow;
+    quadPx = vec2(size * 2.2 * grow);
+    corner = (aCorner - 0.5) * quadPx;
   }
   vec2 px = center + corner;
   gl_Position = vec4(px.x / uViewPx.x * 2.0 - 1.0, 1.0 - px.y / uViewPx.y * 2.0, 0.0, 1.0);
   vLocal = aCorner - 0.5;
+  vQuadPx = quadPx;
   vAge = aAge;
   vKind = aKind;
   vTint = aTint;
@@ -77,9 +82,11 @@ void main() {
 const FS = `#version 300 es
 precision mediump float;
 in vec2 vLocal;
+in vec2 vQuadPx;
 in float vAge;
 in float vKind;
 in float vTint;
+uniform float uDpr;
 out vec4 outColor;
 const vec3 BID = vec3(0.263, 0.686, 0.961);
 const vec3 ASK = vec3(1.0, 0.667, 0.278);
@@ -90,10 +97,11 @@ void main() {
   vec3 color; float a;
   if (vKind == 0.0) {
     // Bite: sharp-edged like the bars themselves — a soft round glow here
-    // reads as a smudge, hard-learned. White-hot at birth, cooling into
-    // the side hue, gone completely; fade² ends decisively, no dull tail.
-    vec2 d = (0.5 - abs(vLocal)) * 2.0;
-    float rect = smoothstep(0.0, 0.10, min(d.x, d.y));
+    // reads as a smudge, hard-learned. Edge ramp in DEVICE pixels to match
+    // the cells' crispness. White-hot at birth, cooling into the side hue,
+    // gone completely; fade² ends decisively, no dull tail.
+    vec2 edgePx = (0.5 - abs(vLocal)) * vQuadPx;
+    float rect = clamp(min(edgePx.x, edgePx.y) * uDpr / 0.8, 0.0, 1.0);
     float attack = smoothstep(0.0, 0.12, vAge);
     float decay = fade * fade;
     color = mix(tint, vec3(1.0), 0.75 * decay);
@@ -126,6 +134,7 @@ export class SpritePipeline {
   private readonly buffer: WebGLBuffer;
   private readonly scratch = new Float32Array(MAX_SPRITES * FLOATS_PER_SPRITE);
   private readonly uViewPx: WebGLUniformLocation;
+  private readonly uDpr: WebGLUniformLocation;
 
   constructor(gl: WebGL2RenderingContext) {
     this.gl = gl;
@@ -149,9 +158,10 @@ export class SpritePipeline {
     }
     gl.bindVertexArray(null);
     this.uViewPx = gl.getUniformLocation(this.program, "uViewPx")!;
+    this.uDpr = gl.getUniformLocation(this.program, "uDpr")!;
   }
 
-  draw(sprites: readonly Sprite[], viewW: number, viewH: number): void {
+  draw(sprites: readonly Sprite[], viewW: number, viewH: number, dpr: number): void {
     const gl = this.gl;
     let n = 0;
     for (const s of sprites) {
@@ -172,6 +182,7 @@ export class SpritePipeline {
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, this.scratch, 0, n * FLOATS_PER_SPRITE);
     gl.uniform2f(this.uViewPx, viewW, viewH);
+    gl.uniform1f(this.uDpr, dpr);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); // premultiplied additive glow
     gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, n);

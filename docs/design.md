@@ -333,7 +333,10 @@ Scale is owned by whoever touched it last: auto reframing passes a 12% deadband
 before committing (the fit breathes with every book change; chasing each breath
 made the field pump), freezes while the viewer is panned away, and yields
 entirely to a hand-set zoom until recenter — a viewer contemplating the whole
-field must never feel the camera stir under them.
+field must never feel the camera stir under them. Travel is bounded by the book
+itself: 15% of a screen of slack past the last resting order, then a firm edge —
+infinite empty scroll reads as being lost, and price space below the deepest bid
+is soon negative.
 Zooming out reveals the whole ~9,000-order field, the long sparse tail of distant
 stale orders glowing dim — and as cell separators drop below a pixel, individual
 orders optically merge into solid depth bars: the L3→L2 aggregation happens in the
