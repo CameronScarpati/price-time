@@ -304,10 +304,15 @@ phosphor wash (read as OLED afterimage smearing) and 950ms trade heat streaks
 (read as motion blur). A third — a warm/cool luminous membrane inside the
 spread gap — survived longer but went the same way: even scissored and edge-
 faded it read as a stray glow behind the field, and the owner's verdict was no
-glow behind the field at all. The standing rule: the field is crisp — hard
-clear every frame — and events are brief crisp strikes; anything that lingers
-or glows behind the cells is out. What holds the room instead is static: a
-dithered radial gradient, cell material with a luminous core, and a vignette.
+glow behind the field at all. A fourth followed: the compact elliptical trade
+strike at the queue front — caught mid-decay, or orphaned in empty space after
+the price moved on — read as dirty smudges. The trade mark is now a BITE: the
+exact rectangular span the level lost, flashing white-hot flush against the
+bar and cooling out in 220ms. The standing rule hardened by all four: the
+field is crisp — hard clear every frame — event light lives in the geometry of
+the row it happened to, and nothing soft or round floats free of the bars.
+What holds the room instead is static: a dithered radial gradient, cell
+material with a luminous core, and a vignette.
 The spread gap needs no fill — the empty band between the bests, breathing
 with the spread, IS the composition's center. The synthetic market runs deliberately
 slower than live's raw message rate (its whole population quotes on screen;
@@ -324,6 +329,11 @@ liquid). Likewise the cell length scale anchors on the *visible core's* median
 order size, not any global statistic — whale quotes and far-tail dust drag a global
 median across decades. **The camera never moves on its own** — it moves only in
 response to data (mid drift, a detected moment) or the user (scroll/pinch to zoom).
+Scale is owned by whoever touched it last: auto reframing passes a 12% deadband
+before committing (the fit breathes with every book change; chasing each breath
+made the field pump), freezes while the viewer is panned away, and yields
+entirely to a hand-set zoom until recenter — a viewer contemplating the whole
+field must never feel the camera stir under them.
 Zooming out reveals the whole ~9,000-order field, the long sparse tail of distant
 stale orders glowing dim — and as cell separators drop below a pixel, individual
 orders optically merge into solid depth bars: the L3→L2 aggregation happens in the

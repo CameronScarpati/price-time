@@ -4,23 +4,32 @@
  * drifting) or to the viewer's hand (zoom, pan). At rest it frames the spread
  * neighborhood; zoomed out it holds the whole nine-thousand-order field.
  *
- * Two rules learned from hands-on feedback:
- * - The frame must ALWAYS contain both best bid and best ask. The row-
- *   legibility zoom floor once pushed a whole side off a phone screen when
- *   the book was gappy; showing the market beats fat rows, every time.
+ * Rules learned from hands-on feedback:
+ * - The frame must ALWAYS contain both best bid and best ask while following.
+ *   The row-legibility zoom floor once pushed a whole side off a phone screen
+ *   when the book was gappy; showing the market beats fat rows, every time.
  * - Panning detaches following explicitly and stays detached until the
  *   viewer recenters (chip, double-tap, Home). A camera that quietly drags
  *   you back mid-exploration feels haunted, not helpful.
+ * - The SCALE belongs to whoever touched it last. Auto framing retargets
+ *   zoom only through a deadband (the span hint breathes with every book
+ *   change; retargeting on each breath made the whole field pump), freezes
+ *   entirely while the viewer is panned away, and stops the moment the
+ *   viewer zooms — a hand-set scale holds rock-steady until recenter.
  */
 export class Camera {
   centerTick = 0;
   pxPerTick = 8;
-  /** User zoom multiplier on the auto framing (wheel/pinch). */
-  zoom = 1;
   /** True after a pan: following is off until the viewer recenters. */
   detached = false;
-  private targetCenter = 0;
+  /** True after a wheel/pinch: the viewer owns the scale until recenter. */
+  scaleHeld = false;
+  private heldPpt = 8;
+  /** Deadbanded auto scale — the last retarget worth a designed move. */
+  private commitPpt = 8;
   private autoPxPerTick = 8;
+  private touchCapPpt = Infinity;
+  private targetCenter = 0;
   private initialized = false;
 
   follow(
@@ -43,21 +52,41 @@ export class Camera {
     // |spread|: an externally crossed book carries a negative spread, and its
     // displaced bests must STILL both fit the frame — the invariant survives
     // the anomaly by zooming out, never by hiding a side.
-    const touchCap = (viewH * 0.55) / Math.max(Math.abs(spreadTicks) + 12, 12);
-    ppt = Math.max(Math.min(ppt, touchCap), 0.05);
+    this.touchCapPpt = (viewH * 0.55) / Math.max(Math.abs(spreadTicks) + 12, 12);
+    ppt = Math.max(Math.min(ppt, this.touchCapPpt), 0.05);
     this.autoPxPerTick = ppt;
     if (!this.initialized) {
       this.centerTick = midTick;
-      this.pxPerTick = this.autoPxPerTick * this.zoom;
+      this.commitPpt = ppt;
+      this.heldPpt = ppt;
+      this.pxPerTick = ppt;
       this.initialized = true;
     }
+  }
+
+  /** The scale the next frame eases toward, honoring who owns it. */
+  private targetScale(): number {
+    if (this.scaleHeld) {
+      // A hand-set scale holds absolutely while exploring; while following,
+      // the both-bests cap still binds (zooming in cannot hide the market).
+      return this.detached ? this.heldPpt : Math.min(this.heldPpt, this.touchCapPpt);
+    }
+    if (this.detached) return this.pxPerTick; // frozen: no unrequested zoom
+    // Deadband: the auto fit changes with every book breath; commit to a new
+    // scale only when it has drifted far enough to be a designed move. The
+    // both-bests invariant bypasses the deadband — it shrinks NOW.
+    if (this.commitPpt > this.touchCapPpt) this.commitPpt = this.touchCapPpt;
+    else if (Math.abs(this.autoPxPerTick / this.commitPpt - 1) > 0.12) {
+      this.commitPpt = this.autoPxPerTick;
+    }
+    return this.commitPpt;
   }
 
   /** Advance the camera by `dtMs`. In reduced motion, snap on a slow cadence
    * instead of easing — discrete stillness, not a smeared glide. */
   update(dtMs: number, nowMs: number, reduced: boolean): void {
     if (!this.initialized) return;
-    const targetPxPerTick = this.autoPxPerTick * this.zoom;
+    const targetPxPerTick = this.targetScale();
 
     // Target velocity (EMA), for feed-forward. Clamped so a reseed's price
     // jump can't launch the camera; the transition/spring handles jumps.
@@ -97,11 +126,10 @@ export class Camera {
       return;
     }
 
-    // A released pan is a finite GLIDE to a known, grid-snapped endpoint —
-    // ease-out cubic covers the ground fast and LANDS, full stop. The old
-    // exponential friction curve was asymptotic and audibly dragged its feet
-    // for the last half-second (hands-on feedback); a fixed endpoint also
-    // lets the field settle ON the tick grid instead of straddling rows.
+    // A released pan (or a PageUp/Down leap) is a finite GLIDE to a known,
+    // grid-snapped endpoint — ease-out cubic covers the ground fast and
+    // LANDS, full stop. The old exponential friction curve was asymptotic
+    // and audibly dragged its feet for the last half-second (hands-on).
     if (this.glideDurMs > 0) {
       const t = (nowMs - this.glideStartMs) / this.glideDurMs;
       if (t >= 1) {
@@ -126,7 +154,10 @@ export class Camera {
       const tau = Math.min(Math.max(450 - (errPx - 20) * 1.8, 120), 450);
       this.centerTick += (this.targetCenter - this.centerTick) * (1 - Math.exp(-dtMs / tau));
     }
-    this.pxPerTick += (targetPxPerTick - this.pxPerTick) * (1 - Math.exp(-dtMs / 450));
+    // Scale easing: quick under the hand (a laggy zoom feels like syrup),
+    // stately when the auto framing recomposes.
+    const tauScale = this.scaleHeld ? 180 : 700;
+    this.pxPerTick += (targetPxPerTick - this.pxPerTick) * (1 - Math.exp(-dtMs / tauScale));
   }
   private lastSnapMs = 0;
   private glideStartMs = 0;
@@ -140,11 +171,23 @@ export class Camera {
   private transitionFromPpt = 0;
 
   wheelZoom(deltaY: number): void {
-    this.zoom = Math.min(Math.max(this.zoom * Math.exp(-deltaY * 0.0012), 0.0004), 4);
+    this.holdScale(this.scaleRef() * Math.exp(-deltaY * 0.0012));
   }
 
   pinchZoom(factor: number): void {
-    this.zoom = Math.min(Math.max(this.zoom * factor, 0.0004), 4);
+    this.holdScale(this.scaleRef() * factor);
+  }
+
+  private scaleRef(): number {
+    return this.scaleHeld ? this.heldPpt : this.pxPerTick;
+  }
+
+  private holdScale(ppt: number): void {
+    this.scaleHeld = true;
+    // Absolute bounds: deep enough out to hold the far constellation
+    // (fishing orders sit millions of ticks away), close enough in that a
+    // single row can fill a third of the screen.
+    this.heldPpt = Math.min(Math.max(ppt, 0.0008), 64);
   }
 
   panTicks(dTicks: number): void {
@@ -159,7 +202,20 @@ export class Camera {
    * settle that aligns the field to the grid. Presentation only. */
   fling(ticksPerMs: number): void {
     if (!Number.isFinite(ticksPerMs) || !this.initialized) return;
-    let end = this.centerTick + ticksPerMs * 260;
+    this.planGlide(this.centerTick + ticksPerMs * 260, 160, 480);
+  }
+
+  /** Leap by a fixed distance (PageUp/Down): same glide, chainable — a rapid
+   * second leap extends from the in-flight endpoint, not the current spot. */
+  nudge(dTicks: number): void {
+    if (!this.initialized) return;
+    this.detached = true;
+    const base = this.glideDurMs > 0 ? this.glideToCenter : this.centerTick;
+    this.planGlide(base + dTicks, 220, 480);
+  }
+
+  private planGlide(endTick: number, minDurMs: number, maxDurMs: number): void {
+    let end = endTick;
     // Below ~3px/tick no row grid is discernible — snapping there would just
     // quantize a smooth glide for nothing.
     if (this.pxPerTick >= 3) end = Math.round(end);
@@ -170,7 +226,7 @@ export class Camera {
     }
     // Duration scales with distance so short nudges stop near-immediately,
     // capped so a hard flick still resolves in under half a second.
-    this.glideDurMs = Math.min(Math.max(distPx * 1.2, 160), 480);
+    this.glideDurMs = Math.min(Math.max(distPx * 1.2, minDurMs), maxDurMs);
     this.glideStartMs = performance.now();
     this.glideFromCenter = this.centerTick;
     this.glideToCenter = end;
@@ -179,7 +235,7 @@ export class Camera {
   /** Return to the market: a finite designed transition, not a spring. */
   recenter(): void {
     this.detached = false;
-    this.zoom = 1;
+    this.scaleHeld = false;
     this.glideDurMs = 0;
     this.transitionStartMs = performance.now();
     this.transitionFromCenter = this.centerTick;

@@ -268,6 +268,28 @@ export class Renderer {
     if (meta.transition !== null) this.transitionStartMs = nowMs;
     this.delegate.onMeta(meta);
 
+    // Level totals for every tick a trade touched this frame, read off the
+    // packed (post-event) frame. The bite flash covers exactly the span the
+    // level LOST — from today's bar end outward by the consumed amount — so
+    // it always sits flush against a bar, never floating in empty space.
+    // One pass over the instances, only when trades happened.
+    const levelTotals = new Map<number, number>();
+    for (const event of meta.events) {
+      if (event.kind === "trade") {
+        levelTotals.set(event.tick * 2 + opposite(event.aggressor), 0);
+      }
+    }
+    if (levelTotals.size > 0) {
+      const f32 = frame.f32;
+      const count = f32[Header.InstanceCount];
+      for (let i = 0; i < count; i++) {
+        const base = FRAME_HEADER_FLOATS + i * FRAME_STRIDE;
+        const key = f32[base] * 2 + f32[base + 3];
+        const cur = levelTotals.get(key);
+        if (cur !== undefined) levelTotals.set(key, cur + f32[base + 2]);
+      }
+    }
+
     // Spawn the decays of this frame's discrete events. Trades all get drawn
     // — staggered inside the burst so a sweep reads as a run, not a blob.
     let tradeIndex = 0;
@@ -276,22 +298,26 @@ export class Renderer {
       const y = tickToY(event.tick, p);
       if (y < -40 || y > p.viewH + 40) continue;
       if (event.kind === "trade") {
-        // A heat streak reaching into the consumed side, slow to cool: rapid
-        // trades pool into sustained warmth instead of strobing. Size grows
-        // with the square root of quantity so glow AREA tracks size — a
-        // linear radius would overstate big trades. Direction rides the sign
-        // (sprites.ts); in the spine layout everything strikes rightward.
         const makerSide = opposite(event.aggressor);
         const dir = p.layout === 1 ? 1 : makerSide === Side.Bid ? -1 : 1;
-        const sizePx = Math.min(8 + Math.sqrt(event.sats * this.pxPerSat) * 1.5, 22);
+        const total = levelTotals.get(event.tick * 2 + makerSide) ?? 0;
+        const x = p.seamX + dir * total * this.pxPerSat;
+        if (x < -40 || x > p.viewW + 40) continue;
         this.sprites.push({
-          xPx: p.seamX, yPx: y, sizePx: dir * sizePx,
+          xPx: x, yPx: y,
+          // Signed width IS the consumed quantity in the length lens (floor
+          // so dust trades stay visible); height is the row itself. The
+          // reduced-motion ring keeps its compact √quantity footprint.
+          sizePx: reduced
+            ? dir * Math.min(8 + Math.sqrt(event.sats * this.pxPerSat) * 1.5, 22)
+            : dir * Math.min(Math.max(event.sats * this.pxPerSat, 2), p.viewW),
+          hPx: Math.min(Math.max(p.pxPerTick * 0.9, 1.5), 36),
           age01: 0,
-          kind: reduced ? SpriteKind.Ring : SpriteKind.Flash,
+          kind: reduced ? SpriteKind.Ring : SpriteKind.Bite,
           tint: event.liquidation ? 2 : event.aggressor === Side.Bid ? 1 : 0,
           delayMs: reduced ? 0 : Math.min(tradeIndex++ * 45, 220),
           bornMs: nowMs,
-          lifeMs: reduced ? 1600 : 260,
+          lifeMs: reduced ? 1600 : 220,
         });
       } else if (!reduced) {
         const dir = p.layout === 1 ? 1 : event.side === Side.Bid ? -1 : 1;
@@ -302,6 +328,7 @@ export class Renderer {
         this.sprites.push({
           xPx: x, yPx: y,
           sizePx: Math.max(3, Math.min(event.sats * this.pxPerSat, 14)),
+          hPx: 0,
           age01: 0,
           kind: SpriteKind.Ghost,
           tint: event.side === Side.Bid ? 0 : 1,
@@ -376,6 +403,11 @@ export class Renderer {
       if (s.age01 < 0) s.age01 = -1; // waiting for its stagger slot
     }
     this.sprites = this.sprites.filter((s) => s.age01 <= 1);
+  }
+
+  /** Dev hook: live event sprites (kind/age), for headless verification. */
+  spriteSnapshot(): { kind: number; age: number }[] {
+    return this.sprites.map((s) => ({ kind: s.kind, age: s.age01 }));
   }
 
   /** Dev hook: the latest frame's header and a sample of instances. */
