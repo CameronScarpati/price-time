@@ -59,6 +59,7 @@ export class Camera {
     if (!this.initialized) return;
     const targetPxPerTick = this.autoPxPerTick * this.zoom;
     if (reduced) {
+      this.flingTicksPerMs = 0;
       if (nowMs - this.lastSnapMs > 1000) {
         if (!this.detached) this.centerTick = this.targetCenter;
         this.pxPerTick = targetPxPerTick;
@@ -66,12 +67,25 @@ export class Camera {
       }
       return;
     }
-    // Slower than a UI spring on purpose: the camera is part of the trance.
-    const k = 1 - Math.exp(-dtMs / 450);
+    // Fling momentum: a released pan glides out with native-feeling friction
+    // instead of stopping dead the frame the finger lifts.
+    if (this.flingTicksPerMs !== 0) {
+      this.centerTick += this.flingTicksPerMs * dtMs;
+      this.flingTicksPerMs *= Math.exp(-dtMs / 260);
+      if (Math.abs(this.flingTicksPerMs * this.pxPerTick) < 0.02) this.flingTicksPerMs = 0;
+    }
+    // The follow spring is slow at rest (the camera is part of the trance)
+    // but tightens as the pixel error grows: zoomed to single orders, a
+    // quote-to-quote jump is hundreds of pixels, and a dreamy spring there
+    // reads as the view sliding long after the market stopped.
+    const errPx = Math.abs(this.targetCenter - this.centerTick) * this.pxPerTick;
+    const tau = Math.min(Math.max(450 - (errPx - 40) * 1.6, 140), 450);
+    const k = 1 - Math.exp(-dtMs / tau);
     if (!this.detached) this.centerTick += (this.targetCenter - this.centerTick) * k;
-    this.pxPerTick += (targetPxPerTick - this.pxPerTick) * k;
+    this.pxPerTick += (targetPxPerTick - this.pxPerTick) * (1 - Math.exp(-dtMs / 450));
   }
   private lastSnapMs = 0;
+  private flingTicksPerMs = 0;
 
   wheelZoom(deltaY: number): void {
     this.zoom = Math.min(Math.max(this.zoom * Math.exp(-deltaY * 0.0012), 0.0004), 4);
@@ -84,11 +98,19 @@ export class Camera {
   panTicks(dTicks: number): void {
     this.centerTick += dTicks;
     this.detached = true;
+    this.flingTicksPerMs = 0;
+  }
+
+  /** Release a pan with velocity: the glide-out is presentation. */
+  fling(ticksPerMs: number): void {
+    if (!Number.isFinite(ticksPerMs)) return;
+    this.flingTicksPerMs = ticksPerMs;
   }
 
   /** Snap back to the market: re-attach following and reset zoom. */
   recenter(): void {
     this.detached = false;
     this.zoom = 1;
+    this.flingTicksPerMs = 0;
   }
 }

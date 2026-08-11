@@ -65,11 +65,20 @@ function boot(): void {
   let lastY = 0;
   let pinchDist = 0;
   let lastTapMs = 0;
+  // Flick velocity: an exponentially-smoothed px/ms estimate from the last
+  // few moves, released into the camera as momentum on pointerup.
+  let velPxPerMs = 0;
+  let lastMoveMs = 0;
   window.addEventListener("pointerdown", (e) => {
     dragging = true;
     lastY = e.clientY;
+    velPxPerMs = 0;
+    lastMoveMs = performance.now();
   });
   window.addEventListener("pointerup", (e) => {
+    if (dragging && Math.abs(velPxPerMs) > 0.08 && performance.now() - lastMoveMs < 80) {
+      renderer.camera.fling(velPxPerMs / renderer.camera.pxPerTick);
+    }
     dragging = false;
     if (e.pointerType === "touch") {
       const now = performance.now();
@@ -86,8 +95,13 @@ function boot(): void {
   window.addEventListener("pointermove", (e) => {
     if (dragging && e.buttons > 0) {
       // A real pan, not a jittery tap: only detach past a few pixels.
-      if (Math.abs(e.clientY - lastY) > 2) {
-        renderer.camera.panTicks((e.clientY - lastY) / renderer.camera.pxPerTick);
+      const dy = e.clientY - lastY;
+      if (Math.abs(dy) > 2) {
+        renderer.camera.panTicks(dy / renderer.camera.pxPerTick);
+        const now = performance.now();
+        const dt = Math.max(now - lastMoveMs, 1);
+        velPxPerMs = velPxPerMs * 0.6 + (dy / dt) * 0.4;
+        lastMoveMs = now;
         lastY = e.clientY;
       }
     } else if (e.pointerType === "mouse") {
