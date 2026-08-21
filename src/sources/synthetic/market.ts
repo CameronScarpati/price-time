@@ -10,8 +10,11 @@ import { Prng } from "./prng";
  *
  * Determinism: all randomness flows from one seeded PRNG and all scheduling
  * happens in engine time via generate(untilMicro). The same (seed, calibration,
- * handoff book) always produces the identical event stream; wall-clock only
- * decides how fast the pump asks for it.
+ * handoff book, sequence of generate() cut points) always produces the
+ * identical event stream. The cut points are part of the contract because
+ * fair-value drift draws from the PRNG once per generate() call, so runs
+ * that slice time differently diverge; the worker's pump and the tests both
+ * fix their cadence. Pinned in test/sources/market-cadence.test.ts.
  *
  * The agent model is deliberately modest, but each behavior earns its place
  * by producing a real phenomenon: makers re-quoting (spread breathing and the

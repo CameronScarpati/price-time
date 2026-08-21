@@ -22,7 +22,8 @@ import {
 /**
  * A price-time-priority matching engine as a deterministic state machine:
  * an ordered command stream in, an event stream out, no clocks, no randomness,
- * no I/O. The same commands always produce the same events (tested by hash).
+ * no I/O. The same commands always produce the same events (pinned by the
+ * stream digest in test/engine/golden-stream.test.ts).
  *
  * Two authorities exist (docs/design.md §2): "internal" matches arrivals
  * itself and enforces strict invariants (the book can never cross); "external"
