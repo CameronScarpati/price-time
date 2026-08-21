@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "A live matching engine, made visible — real Bitstamp order flow through a deterministic price-time-priority engine, rendered as a living book.",
+  "description": "A live matching engine, made visible: real Bitstamp order flow through a deterministic price-time-priority engine, rendered as a living book.",
   "author": "Cameron Scarpati",
   "license": "MIT",
   "repository": {

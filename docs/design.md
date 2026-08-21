@@ -430,8 +430,8 @@ labeled playback-time effect (§10), never a silent lag.
 | Frame time | p99 ≤ 16.7ms over a 5-minute soak; zero >50ms long frames in steady state | rAF delta distribution + Long Animation Frames API, on-device |
 | Device target | mid-range Android (Pixel 6a class) + iPhone SE class | real hardware; emulators lie about GPU and thermals |
 | Soak duration | ≥ 5 min continuous | long enough to expose thermal throttling |
-| Event throughput | 2,000 events/s sustained, zero dropped trade prints | synthetic flood harness |
-| Simultaneous cells | 10,000 at 60fps | full book + headroom, flood scene |
+| Event throughput | 2,000 events/s sustained, zero dropped trade prints | synthetic flood harness (planned; not yet built) |
+| Simultaneous cells | 10,000 at 60fps | full book + headroom, flood scene (planned; not yet built) |
 | Time to first motion | < 2.0s on 4G-class network | first order/trade animation after navigation |
 | JS heap | < 150MB; zero steady-state per-frame allocation | DevTools allocation sampling on-device |
 | Bundle | ≤ 150KB gzipped JS | build output; no framework makes this comfortable |
@@ -556,7 +556,8 @@ spine must be solid first, and the brief agrees on the ordering.
   construction: there is no patch code path to call).
 - **Live-mode asymmetry:** `consume` naming a non-front order applies cleanly and
   increments the anomaly counter (never throws, never reorders).
-- **Soak harness** (`tools/soak.mjs`, run manually, results recorded in docs): one
+- **Soak harness** (`test/soak/soak.test.ts`, run manually via `SOAK=1`, results
+  recorded in `docs/perf/`): one
   hour live — BBO within one tick of the venue's REST book continuously, chain
   continuity stats, divergence and anomaly counts, cross-channel skew distribution.
 - **CI smoke:** build + tests + a Playwright screenshot of the page running a
@@ -592,14 +593,14 @@ src/
   engine/        book, levels, matching (fifo/pro-rata), commands, events, invariants
   sources/       source interface; bitstamp/ (ws, snapshot, chain, normalize);
                  synthetic/ (agents, calibration); replay/ (capture, player)
-  time/          the three clocks
   detect/        phenomenon detectors, caption text
-  worker/        worker entry, frame packing (typed arrays, transfer)
+  worker/        worker entry, pipeline (clocks, degradation ladder), frame
+                 packing (typed arrays, transfer)
   render/        gl (context, instanced cells, text texture), camera, motion,
                  layouts (seam, spine), overlay (canvas 2d)
   ui/            provenance, inspector, tape, controls, explainer, narrator
   app.ts
-tools/           probe, capture, soak, flood (perf harness)
+tools/           capture, dev-relay, net-probe, screenshot, smoke
 docs/            brief.md, design.md
 .claude/skills/  book-reconstruction, engine-invariants, device-performance,
                  truth-rules, visual-craft, verifying-a-change
