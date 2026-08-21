@@ -269,15 +269,18 @@ export class Renderer {
     if (meta.transition !== null) this.transitionStartMs = nowMs;
     this.delegate.onMeta(meta);
 
-    // Level totals for every tick a trade touched this frame, read off the
+    // Level totals for every tick an event touched this frame, read off the
     // packed (post-event) frame. The bite flash covers exactly the span the
     // level LOST — from today's bar end outward by the consumed amount — so
     // it always sits flush against a bar, never floating in empty space.
-    // One pass over the instances, only when trades happened.
+    // Cancel ghosts anchor the same way (below). One pass over the
+    // instances, only when events happened.
     const levelTotals = new Map<number, number>();
     for (const event of meta.events) {
       if (event.kind === "trade") {
         levelTotals.set(event.tick * 2 + opposite(event.aggressor), 0);
+      } else {
+        levelTotals.set(event.tick * 2 + event.side, 0);
       }
     }
     if (levelTotals.size > 0) {
@@ -322,13 +325,21 @@ export class Renderer {
         });
       } else if (!reduced) {
         const dir = p.layout === 1 ? 1 : event.side === Side.Bid ? -1 : 1;
-        const x = p.seamX + dir * (event.aheadSats + event.sats / 2) * this.pxPerSat;
+        // Anchor flush against the SURVIVING bar's end, exactly like the
+        // bite: the queue compacts under the ghost the same frame, so the
+        // dead order's historical offset (aheadSats) points at re-occupied
+        // cells mid-queue and at empty void for tail deaths — the audited
+        // "orphaned dash floating in space". The visible change IS the bar
+        // end retreating; the sigh sits on it.
+        const total = levelTotals.get(event.tick * 2 + event.side) ?? 0;
+        const ghostPx = Math.max(3, Math.min(event.sats * this.pxPerSat, 14));
+        const x = p.seamX + dir * (total * this.pxPerSat + ghostPx / 2);
         // Footprint tied to the dead order's real on-screen length — the old
         // +4px floor made dust cancels puff far larger than the cell that
         // vanished.
         this.sprites.push({
           xPx: x, yPx: y,
-          sizePx: Math.max(3, Math.min(event.sats * this.pxPerSat, 14)),
+          sizePx: ghostPx,
           hPx: 0,
           age01: 0,
           kind: SpriteKind.Ghost,

@@ -105,7 +105,12 @@ void main() {
     float attack = smoothstep(0.0, 0.12, vAge);
     float decay = fade * fade;
     color = mix(tint, vec3(1.0), 0.75 * decay);
-    a = rect * attack * decay * 0.85;
+    // Gate the tail: a straight decay spent its whole second half BELOW the
+    // cells' own luminance, compositing over the ink as a muddy brown slab
+    // (dead navy on the bid side) — caught in every audit still. The flash
+    // now ends while still brighter than the bar it bit; cooling stays,
+    // mud goes.
+    a = rect * attack * decay * smoothstep(0.12, 0.45, decay) * 0.85;
   } else if (vKind == 1.0) {
     // Cancel ghost: a row-aligned sliver where a quote died — the shape of
     // the cell that vanished. Brief and faint: it must never read as an

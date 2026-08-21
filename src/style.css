@@ -156,6 +156,13 @@ html, body {
   font-size: 13.5px;
   color: rgba(226, 232, 240, 0.92);
   text-shadow: 0 1px 8px rgba(0, 0, 0, 0.8);
+  /* A scrim pill: the caption band crosses the ask stack, and bare text over
+   * a bright bar was unreadable (audited on a cold-start still). The pill
+   * keeps narration legible over any book without moving with the camera. */
+  background: rgba(10, 14, 18, 0.78);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 999px;
+  padding: 4px 14px;
   opacity: 0;
   pointer-events: none;
   white-space: nowrap;
@@ -190,9 +197,10 @@ html, body {
   font-size: 11.5px;
   max-height: 40vh;
   overflow: hidden;
-  /* An overflowing last row fades instead of shearing mid-glyph. */
-  -webkit-mask-image: linear-gradient(#000 calc(100% - 14px), transparent);
-  mask-image: linear-gradient(#000 calc(100% - 14px), transparent);
+  /* An overflowing last row fades instead of shearing mid-glyph. Two rows
+   * of runway: a 14px mask cut mid-glyph and still read as a shear. */
+  -webkit-mask-image: linear-gradient(#000 calc(100% - 28px), transparent);
+  mask-image: linear-gradient(#000 calc(100% - 28px), transparent);
 }
 .tape-title { color: rgba(148, 163, 184, 0.7); font-size: 10.5px; letter-spacing: 0.08em; margin-bottom: 4px; }
 .tape-row { display: flex; gap: 4px; align-items: baseline; }
@@ -248,7 +256,9 @@ html, body {
 
 .hud {
   position: absolute;
-  top: max(10px, env(safe-area-inset-top));
+  /* Bottom-left: the top row belongs to the chips and byline, and the HUD
+   * text ran straight through them when ?hud=1 was on. */
+  bottom: max(34px, calc(env(safe-area-inset-bottom) + 24px));
   left: 10px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 10.5px;

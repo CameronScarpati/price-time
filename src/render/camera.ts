@@ -27,6 +27,8 @@ export class Camera {
   private heldPpt = 8;
   /** Deadbanded auto scale — the last retarget worth a designed move. */
   private commitPpt = 8;
+  /** Deadbanded both-bests cap for a HELD scale — same pump, same cure. */
+  private capCommitPpt = Infinity;
   private autoPxPerTick = 8;
   private touchCapPpt = Infinity;
   private targetCenter = 0;
@@ -95,7 +97,15 @@ export class Camera {
     if (this.scaleHeld) {
       // A hand-set scale holds absolutely while exploring; while following,
       // the both-bests cap still binds (zooming in cannot hide the market).
-      return this.detached ? this.heldPpt : Math.min(this.heldPpt, this.touchCapPpt);
+      // But the raw cap breathes with every spread change, and passing it
+      // straight through made a deep held zoom pump with the book's breath
+      // (telemetry: ~5% scale wobble, direction flipping sub-second). Same
+      // cure as the auto path: tighten instantly (the invariant cannot
+      // wait), release only past the designed-move deadband.
+      if (this.detached) return this.heldPpt;
+      if (this.capCommitPpt > this.touchCapPpt) this.capCommitPpt = this.touchCapPpt;
+      else if (this.touchCapPpt > this.capCommitPpt * 1.12) this.capCommitPpt = this.touchCapPpt;
+      return Math.min(this.heldPpt, this.capCommitPpt);
     }
     if (this.detached) return this.pxPerTick; // frozen: no unrequested zoom
     // Deadband: the auto fit changes with every book breath; commit to a new
@@ -213,6 +223,8 @@ export class Camera {
 
   private holdScale(ppt: number): void {
     this.scaleHeld = true;
+    // A fresh hand-set scale re-derives which cap binds from scratch.
+    this.capCommitPpt = Infinity;
     // Absolute bounds: deep enough out to hold the far constellation
     // (fishing orders sit millions of ticks away), close enough in that a
     // single row can fill a third of the screen.
@@ -267,6 +279,7 @@ export class Camera {
   recenter(): void {
     this.detached = false;
     this.scaleHeld = false;
+    this.capCommitPpt = Infinity;
     this.glideDurMs = 0;
     this.transitionStartMs = performance.now();
     this.transitionFromCenter = this.centerTick;

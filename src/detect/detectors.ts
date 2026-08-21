@@ -32,7 +32,14 @@ interface SweepState {
   endedMs?: number;
 }
 
-const btc = (sats: Sats): string => `${formatDecimal(sats, 8).replace(/0+$/, "").replace(/\.$/, "")} BTC`;
+/** Caption-grade quantity: a narrated sentence rounds ("2.78 BTC"), because
+ * eight satoshi decimals mid-sentence read as machine output, not narration.
+ * The tape keeps full precision; this helper is caption-only. */
+const btc = (sats: Sats): string => {
+  const v = sats / 1e8;
+  const s = v >= 1 ? v.toFixed(2) : v >= 0.01 ? v.toFixed(3) : v.toFixed(5);
+  return `${s.replace(/0+$/, "").replace(/\.$/, "")} BTC`;
+};
 
 export class Detectors {
   private caption: { text: string; id: number } | null = null;
@@ -156,6 +163,13 @@ export class Detectors {
   /** The most recent caption (renderer decides how long it lingers). */
   currentCaption(): { text: string; id: number } | null {
     return this.caption;
+  }
+
+  /** Discard a pending caption without touching cooldowns. Used once, at the
+   * end of a cold-start warmup: a caption narrating something that happened
+   * before the viewer arrived must not be the first thing they read. */
+  dropCaption(): void {
+    this.caption = null;
   }
 
   /** One plain sentence describing the market right now — the ARIA live

@@ -73,6 +73,58 @@ describe("camera scale ownership and book bounds", () => {
     expect(Math.abs(cam.pxPerTick / settled - 1)).toBeLessThan(0.01);
   });
 
+  it("a held zoom past the both-bests cap does not pump with the spread's breath", () => {
+    const cam = primed();
+    cam.wheelZoom(-2000); // deep in: the hand-set scale sits far above the cap
+    let now = performance.now() + 16;
+    for (let i = 0; i < 60; i++) {
+      now += 16;
+      cam.follow(10_000, 30, 2 + 0.5 * (i % 2), 800, PROFILE);
+      cam.update(16, now, false);
+    }
+    const settled = cam.pxPerTick;
+    // The spread breathes every frame. The audited defect: min(held, rawCap)
+    // retargeted on each breath and the whole field pumped ~5%. The
+    // deadbanded cap must hold the scale still through the same breathing.
+    const seen: number[] = [];
+    for (let i = 0; i < 120; i++) {
+      now += 16;
+      cam.follow(10_000, 30, 2 + 0.5 * (i % 2), 800, PROFILE);
+      cam.update(16, now, false);
+      seen.push(cam.pxPerTick);
+    }
+    expect(Math.max(...seen) / Math.min(...seen) - 1).toBeLessThan(0.005);
+    expect(Math.abs(cam.pxPerTick / settled - 1)).toBeLessThan(0.01);
+  });
+
+  it("the deadbanded cap still tightens instantly and releases on a real narrowing", () => {
+    const cam = primed();
+    cam.wheelZoom(-2000);
+    let now = performance.now() + 16;
+    for (let i = 0; i < 60; i++) {
+      now += 16;
+      cam.follow(10_000, 30, 2, 800, PROFILE);
+      cam.update(16, now, false);
+    }
+    // The cap binds: held 64 ppt, cap 440/14 ~ 31.4.
+    expect(cam.pxPerTick).toBeGreaterThan(30);
+    expect(cam.pxPerTick).toBeLessThan(32);
+    // Widen: both bests must keep fitting NOW — no deadband on the way down.
+    for (let i = 0; i < 40; i++) {
+      now += 16;
+      cam.follow(10_000, 30, 20, 800, PROFILE);
+      cam.update(16, now, false);
+    }
+    expect(cam.pxPerTick).toBeLessThan(15);
+    // Narrow far past the deadband: a designed release, more zoom allowed.
+    for (let i = 0; i < 80; i++) {
+      now += 16;
+      cam.follow(10_000, 30, 0.5, 800, PROFILE);
+      cam.update(16, now, false);
+    }
+    expect(cam.pxPerTick).toBeGreaterThan(30);
+  });
+
   it("freezes auto zoom while detached", () => {
     const cam = primed();
     cam.panTicks(-400); // wander away, no zoom touched
