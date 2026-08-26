@@ -2,10 +2,14 @@ import { describe, expect, it } from "vitest";
 import { Camera } from "../../src/render/camera";
 
 /**
- * The released-pan glide is a promise to the hand: a finite motion that LANDS
- * on the tick grid and stops, rather than an asymptotic coast that drags its
- * feet. These tests pin the landing, not the easing curve — the curve is
- * presentation taste; the endpoint is the contract.
+ * Two contracts, both about ENDINGS. The released-pan glide is a promise to
+ * the hand: a finite motion that LANDS on the tick grid and stops, rather
+ * than an asymptotic coast that drags its feet. And the frame itself is
+ * still by default — between designed moves the camera writes nothing at
+ * all, because a field that creeps by a fraction of a pixel re-snaps every
+ * cell edge against the device grid and boils. These tests pin the landings
+ * and the stillness, not the easing curves — the curve is presentation
+ * taste; the endpoint is the contract.
  */
 
 const PROFILE = { frac: 0.5, minPpt: 4.5, maxPpt: 32 };
@@ -149,7 +153,54 @@ describe("camera scale ownership and book bounds", () => {
       cam.follow(10_000, 30 * (1 + 0.05 * Math.sin(i)), 2, 800, PROFILE);
       cam.update(16, now, false);
     }
-    expect(Math.abs(cam.pxPerTick / settled - 1)).toBeLessThan(0.02);
+    // Not "close to" — identical. The deadband's job is that nothing is
+    // written at all, so the device-grid snap never re-fires.
+    expect(cam.pxPerTick).toBe(settled);
+  });
+
+  it("holds the frame absolutely still while the market drifts inside the deadband", () => {
+    const cam = primed();
+    runFrames(cam, 10);
+    const center = cam.centerTick;
+    const ppt = cam.pxPerTick;
+    // Deadband is 10% of the 800px viewport = 80px; at ~6.7 px/tick that is
+    // ~12 ticks of drift. Walk the mid 9 ticks over a second of frames.
+    let now = performance.now() + 16 * 11;
+    for (let i = 0; i < 60; i++) {
+      now += 16;
+      cam.follow(10_000 + i * 0.15, 30, 2, 800, PROFILE);
+      cam.update(16, now, false);
+    }
+    expect(cam.centerTick).toBe(center);
+    expect(cam.pxPerTick).toBe(ppt);
+  });
+
+  it("answers a walk out of the deadband with one finite move, then stillness", () => {
+    const cam = primed();
+    runFrames(cam, 10);
+    let now = performance.now() + 16 * 11;
+    for (let i = 0; i < 80; i++) {
+      now += 16;
+      cam.follow(10_030, 30, 2, 800, PROFILE); // 30 ticks out: past the band
+      cam.update(16, now, false);
+    }
+    // Landed exactly on the market, not asymptotically near it.
+    expect(cam.centerTick).toBe(10_030);
+    // And then it is over: no residual creep toward anything.
+    for (let i = 0; i < 60; i++) {
+      now += 16;
+      cam.follow(10_030, 30, 2, 800, PROFILE);
+      cam.update(16, now, false);
+    }
+    expect(cam.centerTick).toBe(10_030);
+  });
+
+  it("cuts rather than eases the same move in reduced motion", () => {
+    const cam = primed();
+    runFrames(cam, 10);
+    cam.follow(10_030, 30, 2, 800, PROFILE);
+    cam.update(16, performance.now() + 16 * 12, true);
+    expect(cam.centerTick).toBe(10_030); // one frame, not 650ms
   });
 
   it("clamps panning a little past the deepest order, no further", () => {

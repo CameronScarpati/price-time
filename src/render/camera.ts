@@ -1,10 +1,21 @@
 /**
  * The camera is pure presentation — it decides where you look, never what is
- * there — and it never moves on its own: every motion traces to data (the mid
- * drifting) or to the viewer's hand (zoom, pan). At rest it frames the spread
- * neighborhood; zoomed out it holds the whole nine-thousand-order field.
+ * there — and it never moves on its own: every motion traces to data (the
+ * market leaving the frame) or to the viewer's hand (zoom, pan). It frames
+ * the book from a bird's eye and, above all, it HOLDS STILL.
  *
  * Rules learned from hands-on feedback:
+ * - Stillness is the default state, not a resting point a spring approaches.
+ *   While following, `centerTick` and `pxPerTick` are not written at all
+ *   between designed moves. The old feed-forward-plus-spring pair meant the
+ *   field was always creeping by a fraction of a pixel, and since every cell
+ *   edge snaps to the device grid (cells.ts), each row re-snapped a whole
+ *   device pixel at its own moment: the field boiled, worst exactly while
+ *   the view was moving.
+ * - There is exactly ONE automatic move: a finite 650ms transition that
+ *   lands on the market and ends. It fires when the mid has drifted past the
+ *   deadband, when the committed scale changes, or when the viewer asks to
+ *   recenter — never continuously, never a little bit every frame.
  * - The frame must ALWAYS contain both best bid and best ask while following.
  *   The row-legibility zoom floor once pushed a whole side off a phone screen
  *   when the book was gappy; showing the market beats fat rows, every time.
@@ -17,6 +28,15 @@
  *   entirely while the viewer is panned away, and stops the moment the
  *   viewer zooms — a hand-set scale holds rock-steady until recenter.
  */
+
+/** How far off centre the market may drift, as a fraction of the viewport
+ * height, before the frame is worth redrawing. Wide framing makes this cheap:
+ * a tenth of the screen is many ticks of drift, so on a quiet market the
+ * camera can hold one position for minutes. */
+const REFRAME_DEADBAND_FRAC = 0.1;
+/** A designed move: long enough to read as intent, short enough to be over. */
+const TRANSITION_MS = 650;
+
 export class Camera {
   centerTick = 0;
   pxPerTick = 8;
@@ -87,7 +107,7 @@ export class Camera {
     }
   }
 
-  /** The scale the next frame eases toward, honoring who owns it. */
+  /** The scale the frame stands at, honoring who owns it. */
   private targetScale(): number {
     if (this.scaleHeld) {
       // A hand-set scale holds absolutely while exploring; while following,
@@ -105,38 +125,45 @@ export class Camera {
     return this.commitPpt;
   }
 
-  /** Advance the camera by `dtMs`. In reduced motion, snap on a slow cadence
-   * instead of easing — discrete stillness, not a smeared glide. */
+  /** Advance the camera by `dtMs`. In reduced motion the designed moves are
+   * cut rather than eased — the same decisions, without the travel. */
   update(dtMs: number, nowMs: number, reduced: boolean): void {
     if (!this.initialized) return;
     const targetPxPerTick = this.targetScale();
 
-    // Target velocity (EMA), for feed-forward. Clamped so a reseed's price
-    // jump can't launch the camera; the transition/spring handles jumps.
-    const rawVel = (this.targetCenter - this.prevTarget) / Math.max(dtMs, 1);
-    this.prevTarget = this.targetCenter;
-    const velCap = 1.5 / Math.max(this.pxPerTick, 0.01);
-    this.targetVelTicksPerMs =
-      this.targetVelTicksPerMs * 0.85 + Math.min(Math.max(rawVel, -velCap), velCap) * 0.15;
+    // Is the frame out of date? Only two things can make it so while
+    // following: the market has walked past the deadband, or the committed
+    // scale has changed under it. Neither is checked while the viewer's own
+    // glide is in flight — their hand outranks the market.
+    if (!this.detached && this.transitionStartMs === 0 && this.glideDurMs === 0) {
+      const offPx = Math.abs(this.targetCenter - this.centerTick) * this.pxPerTick;
+      // A HAND-set scale is not the framing's business: it has its own short
+      // ease below, and routing it through a 650ms designed move would make
+      // the wheel feel like syrup.
+      const scaleStale = !this.scaleHeld && Math.abs(targetPxPerTick / this.pxPerTick - 1) > 0.005;
+      if (offPx > this.viewH * REFRAME_DEADBAND_FRAC || scaleStale) {
+        this.beginTransition(nowMs);
+      }
+    }
 
     if (reduced) {
       this.glideDurMs = 0;
-      this.transitionStartMs = 0;
-      if (nowMs - this.lastSnapMs > 1000) {
-        if (!this.detached) this.centerTick = this.targetCenter;
-        this.pxPerTick = targetPxPerTick;
-        this.lastSnapMs = nowMs;
+      if (this.transitionStartMs > 0) {
+        this.transitionStartMs = 0;
+        this.centerTick = this.targetCenter;
       }
+      this.pxPerTick = targetPxPerTick;
+      if (this.detached) this.centerTick = this.clampCenter(this.centerTick);
       return;
     }
 
-    // A recenter is a finite, designed transition — smootherstep over 650ms
-    // that lands ON the (still-moving) target and ends, rather than an
-    // asymptotic spring that covers the distance fast and then audibly
-    // crawls the last forty pixels. Center and zoom travel together, so the
-    // return never reads as a skip between two mismatched motions.
+    // The one automatic move: smootherstep over 650ms that lands ON the
+    // (still-moving) target and ENDS, rather than an asymptotic spring that
+    // covers the distance fast and then audibly crawls the last forty
+    // pixels. Centre and zoom travel together, so a reframe never reads as a
+    // skip between two mismatched motions.
     if (this.transitionStartMs > 0) {
-      const t = (nowMs - this.transitionStartMs) / 650;
+      const t = (nowMs - this.transitionStartMs) / TRANSITION_MS;
       if (t >= 1) {
         this.transitionStartMs = 0;
         this.centerTick = this.targetCenter;
@@ -164,37 +191,31 @@ export class Camera {
       }
     }
 
-    if (!this.detached) {
-      // Feed-forward: move WITH the market's current drift, then let the
-      // spring correct only the residual. A bare spring trails a moving
-      // target by (speed × its time constant) — the "camera towed behind a
-      // running market" feel — and feed-forward removes exactly that lag.
-      this.centerTick += this.targetVelTicksPerMs * dtMs;
-      // The residual spring stays slow at rest (the trance) and tightens as
-      // pixel error grows, so quote-to-quote jumps at single-order zoom
-      // snap into frame.
-      const errPx = Math.abs(this.targetCenter - this.centerTick) * this.pxPerTick;
-      const tau = Math.min(Math.max(450 - (errPx - 20) * 1.8, 120), 450);
-      this.centerTick += (this.targetCenter - this.centerTick) * (1 - Math.exp(-dtMs / tau));
+    // Zoom under the hand stays a short ease — a laggy pinch feels like
+    // syrup — but it SETTLES: an asymptote never arrives, and every frame it
+    // fails to arrive re-snaps every cell edge against the device grid.
+    if (this.scaleHeld && this.pxPerTick !== targetPxPerTick) {
+      this.pxPerTick += (targetPxPerTick - this.pxPerTick) * (1 - Math.exp(-dtMs / 180));
+      if (Math.abs(targetPxPerTick / this.pxPerTick - 1) < 0.001) this.pxPerTick = targetPxPerTick;
     }
-    // Scale easing: quick under the hand (a laggy zoom feels like syrup),
-    // stately when the auto framing recomposes.
-    const tauScale = this.scaleHeld ? 180 : 700;
-    this.pxPerTick += (targetPxPerTick - this.pxPerTick) * (1 - Math.exp(-dtMs / tauScale));
     // Re-assert the book bounds every frame: zooming out at an extreme can
     // push the edge past the extent even though every pan was clamped.
     if (this.detached) this.centerTick = this.clampCenter(this.centerTick);
   }
-  private lastSnapMs = 0;
   private glideStartMs = 0;
   private glideDurMs = 0;
   private glideFromCenter = 0;
   private glideToCenter = 0;
-  private prevTarget = 0;
-  private targetVelTicksPerMs = 0;
   private transitionStartMs = 0;
   private transitionFromCenter = 0;
   private transitionFromPpt = 0;
+
+  private beginTransition(nowMs: number): void {
+    this.glideDurMs = 0;
+    this.transitionStartMs = nowMs;
+    this.transitionFromCenter = this.centerTick;
+    this.transitionFromPpt = this.pxPerTick;
+  }
 
   wheelZoom(deltaY: number): void {
     this.holdScale(this.scaleRef() * Math.exp(-deltaY * 0.0012));
@@ -210,6 +231,9 @@ export class Camera {
 
   private holdScale(ppt: number): void {
     this.scaleHeld = true;
+    // A hand on the zoom cancels an in-flight reframe: the viewer's scale is
+    // the one being eased toward now, not the framing's.
+    this.transitionStartMs = 0;
     // Absolute bounds: deep enough out to hold the far constellation
     // (fishing orders sit millions of ticks away), close enough in that a
     // single row can fill a third of the screen.
@@ -220,6 +244,7 @@ export class Camera {
     this.centerTick = this.clampCenter(this.centerTick + dTicks);
     this.detached = true;
     this.glideDurMs = 0;
+    this.transitionStartMs = 0;
   }
 
   /** Release a pan: plan a finite glide to where the old friction curve
@@ -260,13 +285,11 @@ export class Camera {
     this.glideToCenter = end;
   }
 
-  /** Return to the market: a finite designed transition, not a spring. */
+  /** Return to the market: the same finite designed transition a reframe
+   * uses, so the way back looks like the way the frame moves on its own. */
   recenter(): void {
     this.detached = false;
     this.scaleHeld = false;
-    this.glideDurMs = 0;
-    this.transitionStartMs = performance.now();
-    this.transitionFromCenter = this.centerTick;
-    this.transitionFromPpt = this.pxPerTick;
+    this.beginTransition(performance.now());
   }
 }
