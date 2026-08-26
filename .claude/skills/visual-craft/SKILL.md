@@ -63,6 +63,24 @@ travel a finite curve that ends on its target, or hold the value exactly.
 `1 - exp(-dt/tau)` without a settle is the bug. Deadband first (do not commit
 to a new target at all until it is a real change), then move once, then hold.
 
+The same grid has a second, sharper edge: anything that MOVES across it must
+move in whole device pixels, and any dimension measured against it must be a
+whole number of them. Two rules fall out, both measured:
+
+- **Row height is rounded to whole device pixels** before the edges are
+  snapped. A 7.685 CSS-px row at dpr 2 is 15.37 device pixels, which renders
+  as 15 *or* 16 depending on where the row happens to sit — and each row
+  flips between them at its own moment as the field slides. That mixed,
+  flickering field is what "the bars glitch when I scroll" was.
+- **The drawn standpoint is rounded to a whole device pixel**
+  (`snapCenterToDeviceGrid`). The camera's own centre stays continuous —
+  the deadband and glide math need it — but what reaches the shader stands on
+  the grid, so a pan slides the field in whole pixels and every row keeps its
+  phase. `layout.ts` reads the same snapped value, so hit-testing agrees.
+
+Both are presentation at the smallest scale that exists here: neither can
+move anything by as much as one device pixel.
+
 ## Timing and framing values in use (tuned, not defaulted)
 
 - Camera: bird's-eye. The frame holds the BODY of the book — the innermost

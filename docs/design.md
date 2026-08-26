@@ -365,7 +365,16 @@ recording because it looked like a frame-rate problem and was not: every cell
 edge snaps to the device grid (that is why the field is sharp), while the
 camera eased ASYMPTOTICALLY and therefore never arrived — so the field crept by
 a fraction of a pixel forever and each row re-snapped a whole device pixel at
-its own moment. A boil, loudest exactly while the view was moving. There is now
+its own moment. A boil, loudest exactly while the view was moving. The same grid has a second edge, and it is what a
+pan tripped over: anything moving across it must move in WHOLE device pixels,
+and any dimension measured against it must be a whole number of them. So the
+row height is rounded to whole device pixels before its edges are snapped (a
+7.685 CSS-px row at dpr 2 is 15.37 device pixels — it renders as 15 or 16
+depending where it sits, and each row flips at its own moment as the field
+slides), and the DRAWN standpoint is rounded to a whole device pixel while the
+camera's own centre stays continuous for the deadband and glide math
+(`snapCenterToDeviceGrid`; `layout.ts` reads the same value, so hit-testing
+agrees). There is now
 exactly one automatic move: a 650ms smootherstep that lands on the market and
 ends, fired when the mid walks more than a tenth of the viewport off centre or
 when the committed zoom changes. Measured over 45s of the synthetic understudy,

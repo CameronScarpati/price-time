@@ -60,6 +60,13 @@ void main() {
   // at deep zoom-out rows go sub-pixel and neighbours merge into solid depth
   // (the honest L3→L2 melt), so no fattening below ~3px/tick.
   float rowH = uPxPerTick >= 3.0 ? max(uPxPerTick - 1.0, 2.6) : max(uPxPerTick * 0.86, 0.75);
+  // Round the row height to a whole number of DEVICE pixels. Both edges are
+  // snapped to that grid below, so a height that is 12.74 device pixels
+  // renders as 12 or 13 depending on where the row happens to sit — and it
+  // flips between them as the field slides under a pan, each row at its own
+  // moment. That flicker is what "the bars glitch when I scroll" is. Whole
+  // device pixels make every row the same height, always, phase or no phase.
+  rowH = max(floor(rowH * uDpr + 0.5), 1.0) / uDpr;
   float len = clamp(aSats * uPxPerSat, uMinCellPx, uMaxCellPx);
   float cumPx = aCumBefore * uPxPerSat;
 

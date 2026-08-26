@@ -5,7 +5,7 @@ import {
 import { Camera } from "./camera";
 import { CellPipeline } from "./gl/cells";
 import { PostPipeline } from "./gl/post";
-import type { LayoutParams } from "./layout";
+import { snapCenterToDeviceGrid, type LayoutParams } from "./layout";
 import { Overlay } from "./overlay";
 
 /**
@@ -190,7 +190,11 @@ export class Renderer {
     }
     this.advanceLengthScale(targetPxPerSat, nowMs);
 
-    p.centerTick = this.camera.centerTick;
+    // The camera's own centre stays continuous (the deadband and the glide
+    // math need it); what gets DRAWN stands on the device grid, so a pan
+    // slides the field in whole pixels instead of smearing every row's edges
+    // across them. See snapCenterToDeviceGrid.
+    p.centerTick = snapCenterToDeviceGrid(this.camera.centerTick, this.camera.pxPerTick, this.dpr);
     p.pxPerTick = this.camera.pxPerTick;
     p.pxPerSat = this.pxPerSat;
     p.seamX = p.layout === 0 ? cssW * 0.5 : 10;

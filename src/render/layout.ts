@@ -20,6 +20,30 @@ export interface LayoutParams {
   centerYFrac?: number;
 }
 
+/**
+ * Where the camera STANDS, rounded to a whole device pixel.
+ *
+ * Every cell edge is snapped to the device grid (cells.ts) because that is
+ * what makes the field sharp. The cost is that a centre which moves by a
+ * fraction of a device pixel makes each row's top and bottom cross the grid
+ * at different moments — rows shift and change height against each other
+ * while the field slides, which is exactly what a pan looked like. Moving
+ * the whole field in whole device pixels preserves every row's phase.
+ *
+ * Presentation only, and by construction the smallest possible: it can never
+ * move anything by as much as one device pixel, so no position, ordering, or
+ * magnitude a viewer could read is affected. The renderer writes the result
+ * into `LayoutParams.centerTick`, so the shader and the inspector's
+ * hit-testing both work from the same snapped standpoint.
+ */
+export function snapCenterToDeviceGrid(
+  centerTick: number, pxPerTick: number, dpr: number,
+): number {
+  const devicePerTick = pxPerTick * dpr;
+  if (!(devicePerTick > 0) || !Number.isFinite(devicePerTick)) return centerTick;
+  return Math.round(centerTick * devicePerTick) / devicePerTick;
+}
+
 export function tickToY(tick: number, p: LayoutParams): number {
   return (p.centerTick - tick) * p.pxPerTick + p.viewH * (p.centerYFrac ?? 0.5);
 }
