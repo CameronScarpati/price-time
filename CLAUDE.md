@@ -2,9 +2,10 @@
 
 A single-page visualization of a live matching engine: real order-by-order flow
 from Bitstamp's public BTC/USD feed reconstructed through a price-time-priority
-engine built here, rendered as a breathing order book. It is an art piece with an
-accuracy contract, and a portfolio piece for Cameron Scarpati. `docs/brief.md` is
-the research it stands on; `docs/design.md` is why everything is the way it is.
+engine built here, rendered as a still, wide, sharp order book. It is an art
+piece with an accuracy contract, and a portfolio piece for Cameron Scarpati.
+`docs/brief.md` is the research it stands on; `docs/design.md` is why
+everything is the way it is.
 Read this file fully before changing anything; read the relevant skill in
 `.claude/skills/` before touching its area.
 
@@ -39,19 +40,20 @@ project's spine — market state crosses it only as a packed, transferred
 - `src/worker/` — pipeline (mode ladder, pause/catch-up clocks, calibration),
   frame packer, worker entry.
 - `src/detect/` — phenomenon detectors → captions + screen-reader narration.
-- `src/render/` — WebGL2 instanced cells + sprite decays, camera, Canvas2D
-  overlay, layout math (CPU mirror of the shader — keep them in lockstep or the
-  inspector lies).
+- `src/render/` — WebGL2 instanced cells, camera (bird's-eye framing, still
+  between designed moves), Canvas2D overlay, layout math (CPU mirror of the
+  shader — keep them in lockstep or the inspector lies).
 - `src/ui/` — DOM chrome: provenance, controls, tape, inspector, explainer,
   ARIA narrator.
 
 ## Invariants (not up for renegotiation)
 
-- **Truth rules.** Every pixel that moves is caused by an engine event.
-  Interpolate presentation (camera, decays, stagger), never data (no smoothed
-  prices, no tweened book states, no sliding modifies — a modify is cancel +
-  re-add). If it changes what a viewer would conclude about the market, it is
-  data. See `.claude/skills/truth-rules/`.
+- **Truth rules.** Every pixel that moves is caused by an engine event — and
+  most events now move no pixel of their own, only the book. Interpolate
+  presentation (the camera's framing), never data (no smoothed prices, no
+  tweened book states, no sliding modifies — a modify is cancel + re-add). If
+  it changes what a viewer would conclude about the market, it is data. See
+  `.claude/skills/truth-rules/`.
 - **Engine invariants.** Internally-matched book never crossed; FIFO priority
   exact; per-order quantity conservation; cancels never resurrect; byte-identical
   determinism from a seed. Checked by `checkInvariants` in property tests after
@@ -61,9 +63,13 @@ project's spine — market state crosses it only as a packed, transferred
   purpose — do not add one. See `.claude/skills/book-reconstruction/`.
 - **Disclosure.** The provenance mark always states the mode, and the label
   changes at or before the data does — never after.
+- **Stillness.** The frame holds: between designed moves the camera writes
+  nothing. Every automatic move is finite and lands. Nothing eases
+  asymptotically anywhere on the render path — cell edges snap to the device
+  grid, so a scale or centre that never arrives makes the whole field boil.
 - **Backpressure.** Book state coalesces to one repaint per frame; discrete
-  trade events are never dropped (cancel sprites may be capped; the count is
-  reported).
+  trade events are never dropped (cancels may be capped in the frame's event
+  list; the count is reported).
 - **Numbers.** Integer ticks (cents) and sats only; venue decimal strings are
   parsed digit-wise (`parseDecimal`), never through floating point. Ticks are
   stored in Float64 — real books contain fishing orders past Int32 range.

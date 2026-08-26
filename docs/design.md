@@ -284,18 +284,25 @@ What each visual channel carries (per the brief's encoding findings):
 | Cell length | Order size | linear; min-clamp 1.5px, disclosed in explainer; never max-clamped — a whale order being enormous is the truth |
 | Luminance | Age | new orders arrive bright and settle; long-resting orders dim to embers — waiting made visible |
 | Hue | Side (redundant with position) | blue/cyan bids, amber asks — CVD-safe pair, never red/green |
-| Flash | A trade | instantaneous event; only its decay is animated |
+| Bar shortening | A trade | the level lost exactly that much queue; no mark of its own |
 
-Events: an arriving order materializes at the back of its queue (~120ms fade/scale
-in — presentation of an instantaneous fact). A cancel fades out in place (~100ms).
-A fill lays a **heat streak** along the consumed row — fast attack, ~1s
-exponential cool-down, reaching into the eaten side — so rapid trades pool into
-sustained warmth instead of strobing. A sweep reads as a run of streaks climbing
-or descending the seam, staggered within their frames' decay windows, never
-merged. In live mode, fully filled aggressors never rest, so the aggressor is
-drawn as the strike arriving at the queue front — presentation of a real trade
-event whose side is known from the trade print. `is_liquidation` orders get a
+Events: an arriving order materializes at the back of its queue (~120ms alpha
+ramp — presentation of an instantaneous fact). That ramp is now the ONLY
+per-event animation in the piece. A cancel is the cell going, at the instant it
+went. A trade is the consumed queue getting shorter, at the instant it was
+consumed — the level's own geometry, not a mark laid over it. A sweep reads as
+queue after queue emptying up or down the seam. `is_liquidation` orders get a
 distinct mark (explained in the explainer; rare, worth celebrating).
+
+This is a **deliberate deviation from the brief** (§2 there: "show a trade as
+an instantaneous event — a flash, a spark — and let the decay of that flash be
+the only animated part"). Five versions of that flash were built and reviewed
+on hardware, and the last of them was correct by every rule and still wrong in
+the room: the piece's owner does not want a light going off. Removing it costs
+no truth — a removed animation cannot assert anything — and the trade remains
+visible in the only place it was ever real, which is the book. What the brief
+was protecting against (interpolating the trade's TIME) is protected harder
+now: there is nothing to interpolate.
 
 The frame is composed for trance through stillness and calm pacing (the Listen
 to Wikipedia lesson: one soft bell per second beats forty pops). Two persistence
@@ -306,35 +313,65 @@ spread gap — survived longer but went the same way: even scissored and edge-
 faded it read as a stray glow behind the field, and the owner's verdict was no
 glow behind the field at all. A fourth followed: the compact elliptical trade
 strike at the queue front — caught mid-decay, or orphaned in empty space after
-the price moved on — read as dirty smudges. The trade mark is now a BITE: the
-exact rectangular span the level lost, flashing white-hot flush against the
-bar and cooling out in 220ms. The standing rule hardened by all four: the
-field is crisp — hard clear every frame — event light lives in the geometry of
-the row it happened to, and nothing soft or round floats free of the bars.
-What holds the room instead is static: a dithered radial gradient, cell
-material with a luminous core, and a vignette.
+the price moved on — read as dirty smudges. A fifth answered every one of
+those objections: a BITE, the exact rectangular span the level lost, flashing
+white-hot flush against the bar and cooling out in 220ms, anchored so it could
+never float. It was reverted too, and this time not for a defect — the owner's
+verdict was that a trade should not flash AT ALL, tuned or otherwise. The
+sprite layer went with it, cancel sigh included, and one blended fullscreen
+pass per frame went with that. The rule the whole lineage converges on: the
+field is crisp, nothing is laid OVER the book, and when in doubt an animation
+is removed rather than tuned. What holds the room is static: a dithered radial
+gradient, cell material with a luminous core, and a vignette.
 The spread gap needs no fill — the empty band between the bests, breathing
 with the spread, IS the composition's center. The synthetic market runs deliberately
 slower than live's raw message rate (its whole population quotes on screen;
 live scatters churn across thousands of unseen levels), because the simulation's
 job is to be watchable, honestly labeled, not to impersonate a firehose.
 
-The camera frames the **populated neighborhood** at rest — out to roughly the 4th
-occupied level each side, clamped so rows never fall below queue legibility — and
-tracks the mid with slow spring easing (presentation). A fixed percentage band was
-the original design and it failed against reality twice in one afternoon: on a thin
-day it framed two lonely levels in a void, and any fixed tick span assumes a level
-density real books don't have (BTC/USD levels scatter tens of ticks apart even when
-liquid). Likewise the cell length scale anchors on the *visible core's* median
-order size, not any global statistic — whale quotes and far-tail dust drag a global
-median across decades. **The camera never moves on its own** — it moves only in
-response to data (mid drift, a detected moment) or the user (scroll/pinch to zoom).
-Scale is owned by whoever touched it last: auto reframing passes a 12% deadband
-before committing (the fit breathes with every book change; chasing each breath
-made the field pump), freezes while the viewer is panned away, and yields
-entirely to a hand-set zoom until recenter — a viewer contemplating the whole
-field must never feel the camera stir under them. Travel is bounded by the book
-itself: 15% of a screen of slack past the last resting order, then a firm edge —
+The camera takes a **bird's-eye** standpoint and, above all, HOLDS STILL. The
+span it frames is the book's own extent, bounded by a small fraction of the
+price (5e-5 of mid — a few dollars either side at BTC's price). Two earlier
+rules died to get here. A fixed percentage band failed against reality twice in
+one afternoon: on a thin day it framed two lonely levels in a void, and any
+fixed tick span assumes a level density real books don't have (BTC/USD levels
+scatter tens of ticks apart even when liquid). Its replacement — the 4th
+occupied level each side, capped at a few spreads — was a close-up by
+construction, and it re-chose how close to stand every time occupancy crossed a
+threshold, which is what made the piece read as chasing the market. The bound
+on the extent is not optional: this feed rests asks past $21M and bids at a
+cent, and a captured session's true extent is 2.15 BILLION ticks wide. It
+bounds FRAMING only; `LoTick`/`HiTick` still cross whole for the pan clamp,
+because the extent is data and only the standpoint is ours. The profile's
+`maxPpt` is a ceiling on how CLOSE the camera may ever stand, so a book smaller
+than the frame sits inside it with room around it: a thin market reads thin.
+
+Stillness is then the default state, not a resting point something approaches.
+**The camera never moves on its own** — and now it very nearly never moves at
+all. Between designed moves, `centerTick` and `pxPerTick` are not written. The
+follow spring and its velocity feed-forward are gone, and the reason is worth
+recording because it looked like a frame-rate problem and was not: every cell
+edge snaps to the device grid (that is why the field is sharp), while the
+camera eased ASYMPTOTICALLY and therefore never arrived — so the field crept by
+a fraction of a pixel forever and each row re-snapped a whole device pixel at
+its own moment. A boil, loudest exactly while the view was moving. There is now
+exactly one automatic move: a 650ms smootherstep that lands on the market and
+ends, fired when the mid walks more than a tenth of the viewport off centre or
+when the committed zoom changes. Measured over 45s of the synthetic understudy,
+sampled every 100ms: centre, zoom, and length scale each take about nine
+distinct values — roughly one designed move apiece, and ~96% of frames write
+nothing at all.
+
+The cell length scale anchors on the *visible core's* median order size, not any
+global statistic — whale quotes and far-tail dust drag a global median across
+decades — and it gets the same contract with a much wider deadband (0.5), since
+lengths only ever have to be right relative to each other. Scale is owned by
+whoever touched it last: auto reframing passes a 12% deadband before committing
+(the fit breathes with every book change; chasing each breath made the field
+pump), freezes while the viewer is panned away, and yields entirely to a
+hand-set zoom until recenter — a viewer contemplating the whole field must
+never feel the camera stir under them. Travel is bounded by the book itself:
+15% of a screen of slack past the last resting order, then a firm edge —
 infinite empty scroll reads as being lost, and price space below the deepest bid
 is soon negative.
 Zooming out reveals the whole ~9,000-order field, the long sparse tail of distant
@@ -417,7 +454,9 @@ animation triggers (trades, arrivals, cancels since last frame), and a stats blo
 buffers ping-pong so steady state allocates nothing. The renderer draws the latest
 frame it has; if two arrive between paints it drops the stale one — **resting-book
 states coalesce; discrete trade events are never dropped** (they ride the event
-list and all get drawn, staggered within the frame's decay).
+list, and nothing is dropped on the way in — though since the sprite layer was
+removed nothing is drawn FROM them either: the book state carries every event's
+consequence).
 
 **Backpressure** follows the brief exactly: coalesce book state per frame; never
 drop a trade print; never batch below frame rate; deliberate slow-motion is a
@@ -455,15 +494,16 @@ open item recorded in the README until run on real hardware.
 The brief's rule — interpolate presentation, never data — is enforced by
 architecture, not vigilance: the worker owns every number that describes the
 market; the renderer owns every number that describes *looking* (camera position,
-flash decay clocks, fade alphas, stagger offsets). A pixel may move only in
+the arrival ramp's alpha, the mode-transition dip). A pixel may move only in
 response to (a) a frame-state change from the worker or (b) a presentation clock
 advancing. There is no path by which renderer code can invent a price, a size, or
 an ordering; the packed frame is read-only truth.
 
 Concrete applications: the mid line sits at the real mid, never an eased one — the
-*camera* eases toward it, which changes where you look, not what is there. A
+*camera* moves toward it, which changes where you look, not what is there. A
 modify is a death and a birth (venue semantics), never a slide. Trades are
-instantaneous; decay is presentation. Replay time-compression is a labeled
+instantaneous, and now nothing outlives them: removing an animation can only
+remove an assertion, never add one. Replay time-compression is a labeled
 transformation of playback time. The reduced-motion mode (§13) replaces decays and
 easing with discrete cross-fades — a change of presentation only.
 
@@ -573,9 +613,10 @@ spine must be solid first, and the brief agrees on the ordering.
 - **Side never rides on red/green** — blue/amber hue pair, redundant with position
   (left/right of seam, above/below gap). Verified with a CVD simulator.
 - **`prefers-reduced-motion`** gets a second piece of motion design, not an
-  absence: no camera easing (periodic hard reframes), no flashes or sparks; the
-  book updates as discrete gentle cross-fades on a ~1s cadence; trades appear as
-  quiet rings that fade slowly. Same information, no vestibular triggers.
+  absence — though the gap has narrowed to almost nothing now that the piece
+  itself is still: the same designed reframes happen, cut instead of eased, and
+  the arrival ramp is a whisper rather than a fade. Same information, no
+  vestibular triggers.
 - **Narration:** an ARIA live region updated every ~4s and on detector events with
   the sentence the worker already computes for captions — "spread two dollars,
   bids stacked three to one, a sell just swept two levels." The forcing function

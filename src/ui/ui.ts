@@ -344,11 +344,13 @@ export class Ui {
       "Tap any cell to see its position, how much is ahead of it, and how long it has waited.");
     section("What to watch for",
       "Most quotes are withdrawn, not filled — the constant flicker is quoting machines " +
-      "changing their minds hundreds of times a minute. A flash at the center line is a real " +
-      "trade. A run of flashes climbing the book is a sweep: one large order eating through " +
-      "several prices. After a sweep, watch the hole refill — that is liquidity healing. " +
-      "Zoom out and the queues melt into the market's whole shape; the far, dim orders are " +
-      "wishes parked miles from the price, some resting for days.");
+      "changing their minds hundreds of times a minute. A trade has no mark of its own: it " +
+      "is the queue at the center line getting shorter, cells vanishing from the front of " +
+      "the line where they were next to trade. A sweep is several prices emptying in a row, " +
+      "one large order eating through them, and afterwards the market simply is somewhere " +
+      "else. Then watch the hole refill — that is liquidity healing. The frame holds the " +
+      "whole book at rest; zoom in and a queue becomes countable, one cell per order, and " +
+      "the far dim ones are wishes parked miles from the price, some resting for days.");
     section("Finding your way",
       "Drag up or down to wander the price axis; scroll or pinch to zoom all " +
       "the way from single orders out to the market's whole shape — once you " +

@@ -45,8 +45,9 @@ heap; zero steady-state per-frame allocation.
 
 For burst behavior, force synthetic mode with a hot calibration:
 `?mode=synthetic&seed=1` and temporarily raise `takersPerSec`/excitation in
-`QUIET_BTCUSD` (do not commit the hot values). Trades must all flash
-(staggered), the book must coalesce to one repaint per frame, and the HUD must
+`QUIET_BTCUSD` (do not commit the hot values). Every trade must still reach
+the frame's event list (they are never dropped, even though nothing is drawn
+from them), the book must coalesce to one repaint per frame, and the HUD must
 hold budget through the burst.
 
 ## Recording results

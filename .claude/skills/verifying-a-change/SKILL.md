@@ -38,9 +38,12 @@ gzip budget.
   `node tools/dev-relay.mjs` + `?ws=ws://localhost:8975&rest=http://localhost:8975/api/v2`.
 
 Checklist while watching: spread breathing at center · arrivals joining queue
-backs · cancels vanishing quietly · trades flashing at the seam, staggered in
-bursts · captions appearing on real moments only · provenance label correct
-for the mode · nothing moving you can't name the event for.
+backs · cancels vanishing quietly · trades visible as the queue at the touch
+getting shorter (there is no flash — if you see one, something regressed) ·
+captions appearing on real moments only · provenance label correct for the
+mode · **the frame HOLDING** — pick one row and stare at it: it must not
+shift, creep, or shimmer between the camera's rare designed moves · nothing
+moving you can't name the event for.
 
 ## 4. Mode ladder (when touching pipeline/sources/ui)
 

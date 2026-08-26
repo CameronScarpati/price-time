@@ -43,7 +43,7 @@ queues optically melt into solid depth: you watch order-by-order data
 aggregate into the "market depth" picture everyone else starts from.
 
 Things worth waiting for: a **sweep** (one aggressive order eating through
-several price levels, a run of flashes climbing the book, and the price
+several price levels, queue after queue emptying up the book, and the price
 simply *is* somewhere else afterward); the **refill**, as makers pour quotes
 back into the hole; **cancel storms**, when the flicker doubles because the
 quoting machines all change their minds at once; and on quiet nights, a
@@ -108,8 +108,8 @@ TypeScript, zero runtime dependencies. A Web Worker owns all truth: the
 WebSocket, the snapshot-plus-delta reconstruction (with exact gap detection
 over Bitstamp's event-id chain, and a discard-and-reseed rule: wrong books are
 thrown away, never patched), the matching engine, and the phenomenon
-detectors. The main thread owns all looking: a WebGL2 instanced renderer, a
-spring camera, and every decay and stagger. Market state crosses between them
+detectors. The main thread owns all looking: a WebGL2 instanced renderer and a
+camera that holds still between designed moves. Market state crosses between them
 once per frame as a transferred binary buffer. The engine itself is a pure
 deterministic state machine tested with generative property tests: never a
 crossed book, exact FIFO priority, per-order quantity conservation, cancels
