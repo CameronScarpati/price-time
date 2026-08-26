@@ -165,13 +165,6 @@ export class Detectors {
     return this.caption;
   }
 
-  /** Discard a pending caption without touching cooldowns. Used once, at the
-   * end of a cold-start warmup: a caption narrating something that happened
-   * before the viewer arrived must not be the first thing they read. */
-  dropCaption(): void {
-    this.caption = null;
-  }
-
   /** One plain sentence describing the market right now — the ARIA live
    * region's content, and the design's forcing function: if this sentence
    * can't be said, the visual probably isn't saying it either. */

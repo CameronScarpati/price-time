@@ -54,9 +54,6 @@ export class Pipeline {
   /** Synthetic engine-time cursor (µs) and its wall anchor. */
   private synthCursorMicro = 0;
   private lastPumpMs = 0;
-  /** Non-null only inside a cold-start warmup: the backdated wall clock all
-   * event timestamps use, so warmed orders carry their real synthetic ages. */
-  private warmClockMs: number | null = null;
 
   private liveFlowing = false;
   private liveDownSinceMs: number | null = null;
@@ -135,15 +132,7 @@ export class Pipeline {
     this.syntheticSeededFromLive = seedBook.length > 0;
     this.engine = new Engine("internal");
     this.restedAtMs.clear();
-    // Cold start only: assembling a book from nothing used to make the
-    // piece's first minute its thinnest, worst-looking one — two lone bids
-    // and a top-heavy void (audited). Run the market through 45s of engine
-    // time before the first paint: the viewer simply arrives late enough to
-    // see a mature, aged book. The stream itself is untouched (same seed,
-    // same cuts, deterministic), and a live handoff is NEVER warmed — it
-    // must continue the real book seamlessly from now.
-    const warmupMs = seedBook.length === 0 ? 45_000 : 0;
-    const startMicro = (Date.now() - warmupMs) * 1000;
+    const startMicro = Date.now() * 1000;
     this.synthCursorMicro = startMicro;
     this.synthetic = new SyntheticMarket({
       seed: this.seed,
@@ -152,24 +141,6 @@ export class Pipeline {
       startMicro,
     });
     this.synthetic.start((event) => this.onSourceEvent("synthetic", event));
-    if (warmupMs > 0) {
-      // The warm clock backdates everything time-stamped during the warmup
-      // (ages, tape, detector baselines), so at first paint a 30s-old order
-      // is genuinely 30s old and the calibration windows are already live.
-      const stepMicro = 500_000;
-      for (let t = startMicro + stepMicro; t <= startMicro + warmupMs * 1000; t += stepMicro) {
-        this.warmClockMs = t / 1000;
-        this.synthCursorMicro = t;
-        this.synthetic.generate(t);
-      }
-      this.warmClockMs = null;
-      // The viewer was not here for any of it: no flash burst on frame one,
-      // no caption narrating a pre-arrival event. The tape keeps the recent
-      // history — it is honest, labeled simulation memory.
-      this.renderEvents = [];
-      this.droppedCancels = 0;
-      this.detectors.dropCaption();
-    }
     this.degraded = false;
     if (from !== "synthetic") this.transition = { from, to: "synthetic" };
   }
@@ -235,7 +206,7 @@ export class Pipeline {
       if (event.cmd.kind === "seed") {
         // A fresh book: ages restart from what the venue reported.
         this.restedAtMs.clear();
-        const nowMs = this.warmClockMs ?? Date.now();
+        const nowMs = Date.now();
         for (const o of event.cmd.orders) {
           this.restedAtMs.set(o.id, Math.min(o.micro / 1000, nowMs));
         }
@@ -246,7 +217,7 @@ export class Pipeline {
   }
 
   private afterEngineEvents(events: EngineEvent[]): void {
-    const nowMs = this.warmClockMs ?? Date.now();
+    const nowMs = Date.now();
     for (const event of events) {
       switch (event.kind) {
         case "rested":
