@@ -62,10 +62,11 @@ describe("packFrame content", () => {
     // Near band = mid * 0.0015 ~ 9756 ticks: the whole book is inside it.
     expect(f32[Header.BidDepthNearSats]).toBe(850);
     expect(f32[Header.AskDepthNearSats]).toBe(1350);
-    // spanHint (bird's eye): extentHalf = max(mid - lo, hi - mid)
-    // = max(15, 25) = 25; the price bound is max(6503795 * 5e-5, 200)
-    // = 325.18…, far wider, so the book's own extent is what frames it.
-    expect(f32[Header.SpanHintTicks]).toBe(25);
+    // spanHint (bird's eye): 4 occupied levels, so the body walk wants
+    // ceil(4 * 0.75) = 3 of them — distances from mid in order are 5 (bid),
+    // 5 (ask), 15 (bid) — reaching 15, plus 10% air = 16.5. That is under
+    // the 24-tick floor, which is what a book this small should hit.
+    expect(f32[Header.SpanHintTicks]).toBe(24);
     // Level totals in pack order: bids-from-touch [350, 500], asks [350, 1000];
     // sorted [350, 350, 500, 1000]; index min(floor(4*0.8), 3) = 3.
     expect(f32[Header.CoreLevelP80Sats]).toBe(1000);
@@ -128,13 +129,36 @@ describe("packFrame content", () => {
     packFrame(far, buffer, () => 0);
     const f32 = new Float32Array(buffer);
     // mid is unchanged at 6503795: the fishing orders are far outside the
-    // touch. Bound = max(mid * 5e-5, 200) = 325.18…
+    // touch. The percentile walk wants ceil(6 * 0.85) = 6 levels but runs
+    // past the bound after 4, so the bound governs: max(mid*5e-5, 200).
     expect(f32[Header.MidTick]).toBe(6_503_795);
     expect(f32[Header.SpanHintTicks]).toBeCloseTo(6_503_795 * 5e-5, 3);
     // The extent still crosses whole, for the pan clamp — it is bounded for
     // FRAMING only, never trimmed as data.
     expect(f32[Header.LoTick]).toBe(1);
     expect(f32[Header.HiTick]).toBe(2_100_000_000);
+
+    // A book with enough levels for the percentile itself to govern: six
+    // ticks each side at 5,15,25,35,45,55 from mid. Twelve levels, so the
+    // walk wants ceil(12 * 0.75) = 9 — distances in order are 5,5,15,15,
+    // 25,25,35,35,45 — reaching 45, plus 10% air = 49.5. The 55s and one 45
+    // are the far quarter, deliberately outside the frame.
+    const bodied = seededEngine([
+      { id: 1, side: Side.Bid, tick: 6_503_795 - 5, sats: 10, micro: 1 },
+      { id: 2, side: Side.Ask, tick: 6_503_795 + 5, sats: 10, micro: 2 },
+      { id: 3, side: Side.Bid, tick: 6_503_795 - 15, sats: 10, micro: 3 },
+      { id: 4, side: Side.Ask, tick: 6_503_795 + 15, sats: 10, micro: 4 },
+      { id: 5, side: Side.Bid, tick: 6_503_795 - 25, sats: 10, micro: 5 },
+      { id: 6, side: Side.Ask, tick: 6_503_795 + 25, sats: 10, micro: 6 },
+      { id: 7, side: Side.Bid, tick: 6_503_795 - 35, sats: 10, micro: 7 },
+      { id: 8, side: Side.Ask, tick: 6_503_795 + 35, sats: 10, micro: 8 },
+      { id: 9, side: Side.Bid, tick: 6_503_795 - 45, sats: 10, micro: 9 },
+      { id: 10, side: Side.Ask, tick: 6_503_795 + 45, sats: 10, micro: 10 },
+      { id: 11, side: Side.Bid, tick: 6_503_795 - 55, sats: 10, micro: 11 },
+      { id: 12, side: Side.Ask, tick: 6_503_795 + 55, sats: 10, micro: 12 },
+    ]);
+    packFrame(bodied, buffer, () => 0);
+    expect(f32[Header.SpanHintTicks]).toBe(49.5);
 
     // And the other direction: a book far smaller than the bound is framed
     // by its own extent, so a quiet market reads as a quiet market rather

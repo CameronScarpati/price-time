@@ -65,11 +65,17 @@ to a new target at all until it is a real change), then move once, then hold.
 
 ## Timing and framing values in use (tuned, not defaulted)
 
-- Camera: bird's-eye. The frame holds the book's own extent, bounded by
-  5e-5 of the mid price so the far constellation (asks past $21M, bids at a
-  cent) cannot squash the market into a line. One profile for both layouts;
-  `maxPpt` 4 is a ceiling on how CLOSE it may stand, so a thin book is a
-  wide frame with space in it, never a close-up of three bricks.
+- Camera: bird's-eye. The frame holds the BODY of the book — the innermost
+  75% of occupied levels — bounded by 5e-5 of the mid price so the far
+  constellation (asks past $21M, bids at a cent) cannot squash the market
+  into a line. Body, not extent: one lone order 170 ticks out was setting the
+  scale for everything else and squeezing rows to 3px. One profile for both
+  layouts; `maxPpt` 8 is a ceiling on how CLOSE it may stand, so a thin book
+  is a wide frame with space in it, never a close-up of three bricks — and on
+  a small book that ceiling BINDS, which is the stillest state there is.
+- Row weight is bought with the span, not with a fudge: rows are `ppt - 1`
+  px, so every tick of span you frame is height taken off every row. 7px is
+  the number that survived review; 3px was "too thin for sure".
 - Reframe deadband: a tenth of the viewport height. Measured at 45s of the
   synthetic understudy, that is about one designed move per axis per 45s and
   ~96% of frames writing nothing at all. If a change makes that number worse,

@@ -330,8 +330,16 @@ live scatters churn across thousands of unseen levels), because the simulation's
 job is to be watchable, honestly labeled, not to impersonate a firehose.
 
 The camera takes a **bird's-eye** standpoint and, above all, HOLDS STILL. The
-span it frames is the book's own extent, bounded by a small fraction of the
-price (5e-5 of mid — a few dollars either side at BTC's price). Two earlier
+span it frames is the **body** of the book — the innermost 75% of occupied
+levels plus 10% air — bounded by a small fraction of the price (5e-5 of mid,
+a few dollars either side at BTC's price). Body rather than extent, because
+framing the absolute extent let one lone resting order set the scale for
+everything else: the farthest synthetic order sits anywhere from 68 to 172
+ticks out on luck alone, which squeezed every row to 3px and lurched the zoom
+whenever that order died. Three quarters and not more is a stillness choice,
+measured: the 85th percentile still wobbles enough to re-commit the zoom 68
+times in 40s, where the 75th sits flat at 35-36 ticks and commits 5 times,
+which lets the profile ceiling hold the scale exactly. Two earlier
 rules died to get here. A fixed percentage band failed against reality twice in
 one afternoon: on a thin day it framed two lonely levels in a void, and any
 fixed tick span assumes a level density real books don't have (BTC/USD levels
@@ -343,8 +351,11 @@ on the extent is not optional: this feed rests asks past $21M and bids at a
 cent, and a captured session's true extent is 2.15 BILLION ticks wide. It
 bounds FRAMING only; `LoTick`/`HiTick` still cross whole for the pan clamp,
 because the extent is data and only the standpoint is ours. The profile's
-`maxPpt` is a ceiling on how CLOSE the camera may ever stand, so a book smaller
-than the frame sits inside it with room around it: a thin market reads thin.
+`maxPpt` (8 px/tick) is a ceiling on how CLOSE the camera may ever stand, so a
+book smaller than the frame sits inside it with room around it: a thin market
+reads thin. On the synthetic understudy that ceiling is what normally binds,
+which is the point — a fixed standpoint cannot drift, and rows come out ~7px
+tall instead of the 3px the raw extent produced.
 
 Stillness is then the default state, not a resting point something approaches.
 **The camera never moves on its own** — and now it very nearly never moves at

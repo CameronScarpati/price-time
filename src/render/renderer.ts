@@ -15,8 +15,11 @@ import { Overlay } from "./overlay";
  * ordering, because everything it draws comes out of the transferred frame.
  */
 
-/** The one framing profile, both layouts. See the camera's follow(). */
-const BIRDS_EYE = { frac: 0.82, minPpt: 0.05, maxPpt: 4 } as const;
+/** The one framing profile, both layouts. See the camera's follow(). maxPpt
+ * is a ceiling on how CLOSE the camera may ever stand; the body-of-the-book
+ * span normally binds well before it (~7-9 px/tick), and it exists so a
+ * four-level book cannot become a close-up of four bricks. */
+const BIRDS_EYE = { frac: 0.82, minPpt: 0.05, maxPpt: 8 } as const;
 
 interface HeldFrame {
   buffer: ArrayBuffer;

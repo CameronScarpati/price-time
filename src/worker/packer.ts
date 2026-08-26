@@ -84,25 +84,60 @@ export function packFrame(
   f32[Header.LoTick] = loTick;
   f32[Header.HiTick] = hiTick;
 
-  // Camera span hint: a BIRD'S EYE. The frame holds the book, not a close-up
-  // of the touch, and it holds the same amount of book from one minute to
-  // the next — a standpoint that keeps re-choosing itself is the thing that
-  // made the piece restless.
+  // Camera span hint: a BIRD'S EYE — the frame holds the BODY of the book,
+  // and holds the same amount of it from one minute to the next. A
+  // standpoint that keeps re-choosing itself is what made the piece restless.
   //
-  // Start from the book's own extent, then bound it, because a real book's
-  // far constellation is not a neighborhood: BTC/USD rests asks past $21M
-  // and bids at a cent, so the true extent runs to tens of billions of ticks
-  // and framing it would squash the entire market into one line. The bound
-  // is a fraction of the PRICE, not of the spread — price is the instrument's
-  // own scale and it barely moves, where the spread breathes every second and
-  // would drag the standpoint with it. At BTC's price this is a few dollars
-  // either side of mid; a book that fits inside it (the synthetic
-  // understudy, a quiet venue) is framed whole.
+  // "Body", not extent, and the difference is the whole reason rows are
+  // legible: framing the absolute extent lets ONE lone order set the scale
+  // for everything else. Measured on the synthetic understudy, the farthest
+  // resting order sits 68 to 172 ticks out depending on nothing but luck,
+  // and framing it squeezed every row to 3px and made the zoom lurch when
+  // that order died. A percentile of the occupied levels is both closer and
+  // far steadier. Three quarters, not more: the 85th sits at 40-50 ticks and
+  // still wobbles enough to keep re-committing the zoom (measured: 68
+  // distinct scale values in 40s), while the 75th sits at a flat 35-36 and
+  // barely moves at all (5 values in 40s), which lets the profile ceiling do
+  // the framing and hold it exactly. Rows land at ~7px. The quarter left
+  // outside is the far tail, still reachable by pan (travel is clamped to
+  // the TRUE extent) or by the viewer's own zoom-out.
+  //
+  // The price bound on top is not optional: a real book's far constellation
+  // is not a neighborhood at all. BTC/USD rests asks past $21M and bids at a
+  // cent, and 6,536 occupied levels put even the 75th percentile $65,000 out
+  // — no percentile saves that, so the bound does. It is a fraction of the
+  // PRICE, not of the spread: price is the instrument's own scale and barely
+  // moves, where the spread breathes every second and would drag the
+  // standpoint with it. At BTC's price it is a few dollars either side.
+  //
+  // Cost: the walk stops at the percentile OR at the bound, whichever comes
+  // first, so a deep live book costs the handful of levels inside a few
+  // dollars, not a scan of all 6,536.
   let spanHint = 30;
   if (bestBid !== undefined && bestAsk !== undefined) {
     const mid = (bestBid + bestAsk) / 2;
-    const extentHalf = Math.max(mid - loTick, hiTick - mid);
-    spanHint = Math.max(Math.min(extentHalf, Math.max(mid * 5e-5, 200)), 24);
+    const bound = Math.max(mid * 5e-5, 200);
+    const target = Math.ceil((bt.length + at.length) * 0.75);
+    // Both sides are sorted ascending, so distance from mid grows as the bid
+    // index walks down and the ask index walks up: a two-pointer merge visits
+    // occupied levels in true distance order.
+    let bi = bt.length - 1;
+    let ai = 0;
+    let seen = 0;
+    let reach = 0;
+    while (seen < target) {
+      const dBid = bi >= 0 ? mid - bt[bi] : Infinity;
+      const dAsk = ai < at.length ? at[ai] - mid : Infinity;
+      const next = Math.min(dBid, dAsk);
+      if (next > bound) break; // the bound governs; no need to walk the tail
+      reach = next;
+      if (dBid <= dAsk) bi--;
+      else ai++;
+      seen++;
+    }
+    // A little air past the last framed level, so the body of the book does
+    // not sit flush against the frame edge.
+    spanHint = Math.max(Math.min(seen < target ? bound : reach * 1.1, bound), 24);
   }
   f32[Header.SpanHintTicks] = spanHint;
   f32[Header.CoreLevelP80Sats] = coreLevelP80;
