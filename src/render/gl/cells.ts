@@ -8,8 +8,10 @@ import { cornerBuffer, createProgram } from "./context";
  *
  * What the shader may and may not do is the truth rule in miniature: position
  * and length come only from frame data; the brightness curve reads the
- * order's real age; the 120ms arrival ramp and the transition dim are
- * presentation envelopes on top of instantaneous facts.
+ * order's real age, subtracted here from two numbers the worker supplied
+ * (when the order rested, and the frame's clock) rather than derived — the
+ * renderer still invents nothing; the 120ms arrival ramp and the transition
+ * dim are presentation envelopes on top of instantaneous facts.
  */
 
 const VS = `#version 300 es
@@ -18,7 +20,7 @@ layout(location=1) in float aTick;
 layout(location=2) in float aCumBefore;
 layout(location=3) in float aSats;
 layout(location=4) in float aSide;
-layout(location=5) in float aAge;
+layout(location=5) in float aRestedAtSec;
 layout(location=6) in float aFlags;
 
 uniform vec2 uViewPx;
@@ -36,6 +38,10 @@ uniform float uDim;         // mode-transition luminance dip, 0..1
 uniform float uReduced;     // prefers-reduced-motion
 uniform float uCenterYPx;   // screen y of the camera's center tick
 uniform float uDpr;         // device pixel ratio, for separator snapping
+// The frame's pack-time clock, same epoch as aRestedAtSec. Age is computed
+// HERE rather than packed per order, so the instance block is byte-identical
+// between market events and the pack and the upload can both be skipped.
+uniform float uNowSec;
 
 out vec4 vColor;
 out vec2 vUv;
@@ -108,6 +114,9 @@ void main() {
   vClamped = step(uMaxCellPx, aSats * uPxPerSat);
   vYPx = py;
 
+  // The order's real age: a fact (when it rested) against the frame's clock.
+  // Both come from the worker; the shader only subtracts.
+  float aAge = max(uNowSec - aRestedAtSec, 0.0);
   vec3 base = aFlags > 0.5 ? LIQ : mix(BID, ASK, aSide);
   // Waiting made visible: arrive bright, settle by ~8s, dim to ember by
   // ~10min. Envelopes unchanged; they now travel the per-side hue anchors
@@ -184,6 +193,9 @@ export interface CellUniforms {
   /** Screen y of the center tick (spine puts it at the optical center). */
   centerYPx: number;
   dpr: number;
+  /** The frame's pack-time clock (worker epoch); the shader turns it and each
+   * order's restedAtSec into age. */
+  nowSec: number;
   /** Chrome exclusion: px from the top / bottom edge inside which the field
    * fades to zero (control band, provenance line). */
   bandTopPx: number;
@@ -222,7 +234,7 @@ export class CellPipeline {
     for (const name of [
       "uViewPx", "uCenterTick", "uPxPerTick", "uPxPerSat", "uSeamX",
       "uLayout", "uMinCellPx", "uMaxCellPx", "uDim", "uReduced",
-      "uCenterYPx", "uDpr", "uBandPx", "uViewHPx",
+      "uCenterYPx", "uDpr", "uBandPx", "uViewHPx", "uNowSec",
     ]) {
       this.uniforms[name] = gl.getUniformLocation(this.program, name)!;
     }
@@ -262,6 +274,7 @@ export class CellPipeline {
     gl.uniform1f(this.uniforms.uReduced, u.reduced ? 1 : 0);
     gl.uniform1f(this.uniforms.uCenterYPx, u.centerYPx);
     gl.uniform1f(this.uniforms.uDpr, u.dpr);
+    gl.uniform1f(this.uniforms.uNowSec, u.nowSec);
     gl.uniform2f(this.uniforms.uBandPx, u.bandTopPx, u.bandBottomPx);
     gl.uniform1f(this.uniforms.uViewHPx, u.viewH);
     gl.enable(gl.BLEND);

@@ -70,6 +70,13 @@ project's spine — market state crosses it only as a packed, transferred
 - **Backpressure.** Book state coalesces to one repaint per frame; discrete
   trade events are never dropped (cancels may be capped in the frame's event
   list; the count is reported).
+- **The frame is a fact, not a derivative.** Nothing packed may be computed
+  from "now" — instances carry `restedAtSec`, and age is `meta.nowSec` minus
+  it in the shader — so an unchanged book packs to identical bytes. The
+  worker stamps each frame with a book revision and skips the pack when the
+  buffer handed back still matches; anything that can move the book calls
+  `invalidateFrame()`. Add a per-frame derived value here and the skip
+  silently stops working; miss an invalidation and it shows a stale book.
 - **Numbers.** Integer ticks (cents) and sats only; venue decimal strings are
   parsed digit-wise (`parseDecimal`), never through floating point. Ticks are
   stored in Float64 — real books contain fishing orders past Int32 range.

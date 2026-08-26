@@ -47,8 +47,8 @@ export class Renderer {
   readonly camera = new Camera();
 
   private latest: HeldFrame | null = null;
-  /** The frame whose instances are currently in the GPU buffer. */
-  private uploadedFrame: HeldFrame | null = null;
+  /** Which book state the GPU's instance buffer already holds. */
+  private uploadedRevision = -1;
   private spare: ArrayBuffer | null = null;
   private requestInFlight = false;
 
@@ -67,6 +67,9 @@ export class Renderer {
   /** Frame-time ring for the HUD and the recorded budget numbers. */
   readonly frameTimesMs: number[] = [];
   private frameTimeAt = 0;
+  private lastRevision = -1;
+  private bookChangedAtMs = 0;
+  private lastDrawMs = 0;
 
   layoutParams: LayoutParams;
   bestBid = 0;
@@ -142,16 +145,10 @@ export class Renderer {
 
     const frame = this.latest;
     const reduced = this.delegate.reducedMotion();
-    // One opaque backdrop draw replaces clear + room + vignette: room
-    // gradient and vignette are the same static radial math, and on a 3x
-    // 120Hz phone every saved fullscreen pass is real battery. (No phosphor,
-    // no persistence — the field is crisp by hard rule; see visual-craft.)
-    const isSpine = this.layoutParams.viewW / this.layoutParams.viewH < 0.8;
-    this.postFx.backdrop(
-      this.layoutParams.viewW, this.layoutParams.viewH,
-      isSpine ? 0.28 : 0.3, isSpine ? 0.85 : 1, isSpine ? 1.2 : 1,
-    );
-    if (frame === null) return;
+    if (frame === null) {
+      this.drawBackdrop();
+      return;
+    }
     if (!frame.consumed) {
       frame.consumed = true;
       this.consumeMeta(frame.meta, nowMs);
@@ -215,9 +212,37 @@ export class Renderer {
       else dim = Math.sin(Math.PI * Math.min(t, 1));
     }
 
-    // The GPU already holds this frame's instances unless a new one arrived.
-    const fresh = this.uploadedFrame !== frame;
-    this.uploadedFrame = frame;
+    // Is this frame's picture the one already on screen? Every number that
+    // reaches a shader is compared; nothing is inferred. A canvas that is not
+    // drawn to keeps showing its last presented frame, so skipping here shows
+    // the same pixels rather than a stale approximation of them.
+    const revision = f32[Header.BookRevision];
+    if (revision !== this.lastRevision) {
+      this.lastRevision = revision;
+      this.bookChangedAtMs = nowMs;
+    }
+    const alpha = this.delegate.chromeAlpha();
+    const same = this.sameAsDrawn(
+      revision, f32[Header.InstanceCount],
+      p.centerTick, p.pxPerTick, p.pxPerSat, p.seamX, p.layout, p.centerYFrac ?? 0.5,
+      p.viewW, p.viewH, this.dpr, dim, reduced ? 1 : 0, alpha,
+    );
+    // The one thing NOT in that list is the clock, which advances every
+    // frame: age drives brightness, so a skipped frame is a frame whose
+    // colours are a few milliseconds stale. Two guards keep that invisible.
+    // The arrival ramp is the fastest age effect at 120ms, and it only runs
+    // on orders that just arrived — which is a book change — so a book that
+    // has been still for longer than the ramp has none in flight. Past that,
+    // the quickest thing left is the 8s settle, and a tenth of a second of it
+    // is under half a percent of luminance.
+    const rampQuiet = nowMs - this.bookChangedAtMs > 130;
+    const ageFresh = nowMs - this.lastDrawMs < 100;
+    if (same && rampQuiet && ageFresh) return;
+    this.lastDrawMs = nowMs;
+
+    const fresh = this.uploadedRevision !== revision;
+    this.uploadedRevision = revision;
+    this.drawBackdrop();
     this.cells.draw(f32, f32[Header.InstanceCount], {
       viewW: cssW, viewH: cssH,
       centerTick: p.centerTick, pxPerTick: p.pxPerTick, pxPerSat: p.pxPerSat,
@@ -225,6 +250,7 @@ export class Renderer {
       reduced,
       centerYPx: cssH * (p.centerYFrac ?? 0.5),
       dpr: this.dpr,
+      nowSec: frame.meta.nowSec,
       bandTopPx: p.layout === 1 ? 18 : 22,
       bandBottomPx: p.layout === 1 ? 58 : 46,
     }, fresh);
@@ -257,6 +283,32 @@ export class Renderer {
     }
     const e = t * t * t * (t * (6 * t - 15) + 10);
     this.pxPerSat = this.scaleFromPxPerSat + (this.committedPxPerSat - this.scaleFromPxPerSat) * e;
+  }
+
+  /** One opaque backdrop draw replaces clear + room + vignette: room gradient
+   * and vignette are the same static radial math, and on a 3x 120Hz phone
+   * every saved fullscreen pass is real battery. (No phosphor, no
+   * persistence — the field is crisp by hard rule; see visual-craft.) */
+  private drawBackdrop(): void {
+    const isSpine = this.layoutParams.viewW / this.layoutParams.viewH < 0.8;
+    this.postFx.backdrop(
+      this.layoutParams.viewW, this.layoutParams.viewH,
+      isSpine ? 0.28 : 0.3, isSpine ? 0.85 : 1, isSpine ? 1.2 : 1,
+    );
+  }
+
+  /** Every value that reaches a shader, against the last frame actually
+   * drawn. Kept as a flat number list so the comparison allocates nothing on
+   * a path that runs sixty times a second. */
+  private readonly drawn: number[] = [];
+  private sameAsDrawn(...values: number[]): boolean {
+    const drawn = this.drawn;
+    let same = drawn.length === values.length;
+    for (let i = 0; i < values.length; i++) {
+      if (drawn[i] !== values[i]) same = false;
+      drawn[i] = values[i];
+    }
+    return same;
   }
 
   /** A new worker frame's metadata: the UI's cue, and the mode-transition

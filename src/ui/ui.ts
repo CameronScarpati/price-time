@@ -310,7 +310,10 @@ export class Ui {
     this.hud.textContent =
       `frame p50 ${s.p50.toFixed(1)}ms · p95 ${s.p95.toFixed(1)}ms · p99 ${s.p99.toFixed(1)}ms · ` +
       `>16.7ms ${s.over16_7}/600 · ${meta.stats.msgsPerSec.toFixed(0)} msg/s · ` +
-      `${meta.stats.orders} orders · ${meta.stats.anomalies} anomalies`;
+      `${meta.stats.orders} orders · ${meta.stats.anomalies} anomalies · ` +
+      // Against the ~60 frames a second the renderer asks for: the gap is
+      // work an unchanged book did not cost.
+      `${meta.packsPerSec} packs/s`;
   }
 
   // -------------------------------------------------------------- explainer

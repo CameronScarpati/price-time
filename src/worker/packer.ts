@@ -6,8 +6,11 @@ import { FRAME_HEADER_FLOATS, FRAME_MAX_INSTANCES, FRAME_STRIDE, Header } from "
 
 /**
  * Serialize the engine's resting book into the binary frame the renderer
- * draws from (layout in protocol.ts). Pure function of engine state plus the
- * pack-time clock used to turn each order's arrival stamp into an age.
+ * draws from (layout in protocol.ts). A pure function of engine state: every
+ * field, `restedAtSec` included, is constant for as long as an order rests,
+ * so two packs of an unchanged book produce identical bytes. That is load
+ * bearing — the pipeline skips the pack entirely when the book has not moved,
+ * and it can only do that because nothing here is derived from "now".
  *
  * Iteration order is by side, then price from the touch outward, then queue
  * position — so if the instance cap is ever hit, what's dropped is the far
@@ -16,7 +19,7 @@ import { FRAME_HEADER_FLOATS, FRAME_MAX_INSTANCES, FRAME_STRIDE, Header } from "
 export function packFrame(
   engine: Engine,
   buffer: ArrayBuffer,
-  ageSecOf: (slot: number) => number,
+  restedAtSecOf: (slot: number) => number,
 ): { instances: number; droppedFarOrders: number; coreMedianSats: number } {
   const f32 = new Float32Array(buffer);
   const store = engine.store;
@@ -52,7 +55,7 @@ export function packFrame(
         f32[write + 1] = cumBefore;
         f32[write + 2] = store.sats[slot];
         f32[write + 3] = side;
-        f32[write + 4] = ageSecOf(slot);
+        f32[write + 4] = restedAtSecOf(slot);
         f32[write + 5] = (store.flags[slot] & FLAG_LIQUIDATION) !== 0 ? 1 : 0;
         write += FRAME_STRIDE;
         instances++;

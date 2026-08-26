@@ -40,6 +40,11 @@ heap; zero steady-state per-frame allocation.
    `npx vitest run test/perf/pack-bench.test.ts` — packFrame on the real
    8.7k-order fixture book (1.27ms at last record; >4ms fails the test).
 6. **Bundle**: `pnpm build` prints gzip sizes; budget is the sum of JS.
+7. **Work not done**: `?hud=1` reports `packs/s` against the ~60 frames a
+   second the renderer requests. An unchanged book costs nothing — no pack, no
+   upload, and when presentation is also still, no draw. If that number sits
+   at 60 on a quiet market, something is deriving a per-frame value into the
+   packed frame and the skip has stopped working.
 
 ## Load synthesis
 

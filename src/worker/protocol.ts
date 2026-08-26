@@ -15,7 +15,13 @@ import type { SourceKind } from "../sources/source";
  *       +1  cumBefore   sats resting ahead of this order at its level
  *       +2  sats        remaining quantity
  *       +3  side        0 bid / 1 ask
- *       +4  ageSec      seconds since this order rested (at pack time)
+ *       +4  restedAtSec when this order rested, seconds from the frame's age
+ *                       epoch — a FACT about the order, constant for as long
+ *                       as it rests, not a per-frame derivative. Age is
+ *                       `meta.nowSec - restedAtSec`, done in the shader. This
+ *                       is what makes the instance block byte-identical
+ *                       between market events, which is what lets the worker
+ *                       skip the pack and the renderer skip the upload.
  *       +5  flags       bit0 liquidation
  *
  * f32 holds ticks near the BTC/USD mid exactly (< 2^24); the far tail loses
@@ -50,6 +56,12 @@ export const Header = {
    * the raw material of the bird's-eye span above. */
   LoTick: 9,
   HiTick: 10,
+  /** Which book state this buffer holds. The worker stamps it; on the next
+   * request it compares the stamp against the live book and re-packs only if
+   * they differ, so a buffer that is still correct is returned untouched.
+   * Never 0 (a fresh, zeroed buffer must always read as stale), and wrapped
+   * well inside f32's exact-integer range. */
+  BookRevision: 11,
 } as const;
 
 /** A discrete market event the renderer may animate (decay/stagger are the
@@ -81,6 +93,12 @@ export interface FrameMeta {
   /** True while the source is degraded and the book may be stale (seeding). */
   degraded: boolean;
   clock: ClockInfo;
+  /** The pack-time clock, seconds from the same age epoch the instances'
+   * restedAtSec use. The renderer hands it to the cell shader, which is the
+   * only place age is turned into brightness. Whoever reads it must take it
+   * with the frame it arrived on: the epoch can be re-based, and when it is,
+   * every instance is re-packed in that same frame. */
+  nowSec: number;
   events: RenderEvent[];
   droppedCancels: number;
   tape: TapeRow[];
@@ -98,6 +116,9 @@ export interface FrameMeta {
   };
   /** Set on the frame where authority changed; triggers the cross-fade. */
   transition: { from: SourceKind; to: SourceKind } | null;
+  /** Frames actually packed in the last second, against the ~60 requested.
+   * HUD only — the on-device proof that an unchanged book costs nothing. */
+  packsPerSec: number;
 }
 
 export interface InspectionResult {

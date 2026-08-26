@@ -1,0 +1,86 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { Pipeline } from "../../src/worker/pipeline";
+import { FRAME_BYTES, Header } from "../../src/worker/protocol";
+
+/**
+ * The pipeline hands a requested buffer back untouched when the book it was
+ * packed from is still the live one. That is only sound because nothing in a
+ * packed frame is derived from "now" — and it is only SAFE because every path
+ * that can move the book calls invalidateFrame(). These pin both halves: the
+ * skip really happens, and it stops happening the instant the market moves.
+ *
+ * The failure this guards against does not look like a crash. It looks like a
+ * correct-seeming book that is a moment behind the market, which is the one
+ * thing this project promises never to show.
+ */
+
+let pipeline: Pipeline | null = null;
+afterEach(() => {
+  pipeline?.stop();
+  pipeline = null;
+  vi.useRealTimers();
+});
+
+function started(): Pipeline {
+  vi.useFakeTimers();
+  const p = new Pipeline();
+  p.start("synthetic", 42);
+  pipeline = p;
+  return p;
+}
+
+describe("unchanged-book frame skip", () => {
+  it("returns a still-current buffer untouched", () => {
+    const p = started();
+    const buffer = new ArrayBuffer(FRAME_BYTES);
+    p.fillFrame(buffer);
+    const first = new Uint8Array(buffer).slice();
+    const revision = new Float32Array(buffer)[Header.BookRevision];
+    expect(revision).toBeGreaterThan(0); // 0 must always read as stale
+
+    // No time advanced, so no market events: the second request must not
+    // rewrite a single byte.
+    p.fillFrame(buffer);
+    expect(new Uint8Array(buffer)).toEqual(first);
+    expect(new Float32Array(buffer)[Header.BookRevision]).toBe(revision);
+  });
+
+  it("re-packs a buffer that is behind, and a fresh one always", () => {
+    const p = started();
+    const held = new ArrayBuffer(FRAME_BYTES);
+    p.fillFrame(held);
+    const stale = new Uint8Array(held).slice();
+    const before = new Float32Array(held)[Header.BookRevision];
+
+    // Let the synthetic market actually quote.
+    vi.advanceTimersByTime(2000);
+    p.fillFrame(held);
+    expect(new Float32Array(held)[Header.BookRevision]).not.toBe(before);
+    expect(new Uint8Array(held)).not.toEqual(stale);
+
+    // A zeroed buffer carries revision 0, which no live book ever matches.
+    const fresh = new ArrayBuffer(FRAME_BYTES);
+    p.fillFrame(fresh);
+    expect(new Float32Array(fresh)[Header.InstanceCount]).toBeGreaterThan(0);
+    expect(new Float32Array(fresh)[Header.BookRevision]).toBe(
+      new Float32Array(held)[Header.BookRevision],
+    );
+  });
+
+  it("hands the renderer a clock it can subtract restedAtSec from", () => {
+    const p = started();
+    const buffer = new ArrayBuffer(FRAME_BYTES);
+    vi.advanceTimersByTime(3000);
+    const meta = p.fillFrame(buffer);
+    // Ages are nowSec minus the packed stamp, and must be sane and positive.
+    expect(meta.nowSec).toBeGreaterThan(0);
+    const f32 = new Float32Array(buffer);
+    const count = f32[Header.InstanceCount];
+    expect(count).toBeGreaterThan(0);
+    for (let i = 0; i < count; i++) {
+      const age = meta.nowSec - f32[16 + i * 6 + 4];
+      expect(age).toBeGreaterThanOrEqual(0);
+      expect(age).toBeLessThan(3600);
+    }
+  });
+});

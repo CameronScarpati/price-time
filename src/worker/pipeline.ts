@@ -9,7 +9,7 @@ import { ReplaySource } from "../sources/replay/player";
 import { QUIET_BTCUSD, SyntheticMarket, type SyntheticCalibration } from "../sources/synthetic/market";
 import type { FlowSource, SourceEvent, SourceKind } from "../sources/source";
 import { packFrame } from "./packer";
-import type { ClockInfo, FrameMeta, InspectionResult, RenderEvent, TapeRow } from "./protocol";
+import { Header, type ClockInfo, type FrameMeta, type InspectionResult, type RenderEvent, type TapeRow } from "./protocol";
 
 const MAX_CANCEL_EVENTS_PER_FRAME = 60;
 const TAPE_LENGTH = 24;
@@ -46,6 +46,21 @@ export class Pipeline {
   /** Wall time each order rested locally, for age display. Keyed by slot via
    * the store's arrays would be stale across engines; id keying survives. */
   private restedAtMs = new Map<number, number>();
+  /** Age epoch. Instances carry `restedAtSec` relative to this, and the frame
+   * carries `nowSec` relative to it, so the renderer can compute age without
+   * anything in the buffer changing between market events. Relative, because
+   * epoch-milliseconds do not survive Float32: 1.77e12 rounds to the nearest
+   * 128k there, where seconds-since-session-start keeps microsecond
+   * resolution for a day. Re-based before precision could ever bite. */
+  private ageEpochMs = Date.now();
+  /** Which book state the packed frame describes. Bumped by every engine
+   * event, so an unchanged book packs to identical bytes and can be skipped.
+   * Starts at 1: a fresh, zeroed buffer reads 0 and must always look stale. */
+  private bookRevision = 1;
+  private lastCoreMedianSats = 8_000_000;
+  /** Pack timestamps over the last second — the HUD's evidence that skipping
+   * is actually happening on real hardware, where it can be believed. */
+  private packTimes: number[] = [];
 
   private paused = false;
   private pauseQueue: { event: SourceEvent; atMs: number }[] = [];
@@ -112,6 +127,7 @@ export class Pipeline {
   private startLive(): void {
     this.mode = "live";
     this.engine = new Engine("external");
+    this.invalidateFrame();
     this.live = new BitstampLiveSource({
       instrument: BTCUSD,
       ...(this.wsUrl !== undefined ? { wsUrl: this.wsUrl } : {}),
@@ -131,6 +147,7 @@ export class Pipeline {
     this.mode = "synthetic";
     this.syntheticSeededFromLive = seedBook.length > 0;
     this.engine = new Engine("internal");
+    this.invalidateFrame();
     this.restedAtMs.clear();
     const startMicro = Date.now() * 1000;
     this.synthCursorMicro = startMicro;
@@ -150,6 +167,7 @@ export class Pipeline {
       const records = await loadCapture(url);
       this.mode = "replay";
       this.engine = new Engine("external");
+      this.invalidateFrame();
       this.restedAtMs.clear();
       this.replay = new ReplaySource(records, BTCUSD);
       this.replay.start((event) => this.onSourceEvent("replay", event));
@@ -200,6 +218,13 @@ export class Pipeline {
 
   private applyEvent(event: SourceEvent): void {
     if (event.type === "command") {
+      // Unconditional, and deliberately so: "a command reached the engine"
+      // is a rule one can check by reading this line, where "an event came
+      // back" would need every command's semantics audited to be sure the
+      // book really cannot have moved. A no-op command costs one skipped
+      // skip; a missed invalidation would show a stale book, which is the
+      // one thing this project does not do.
+      this.invalidateFrame();
       const events = this.engine.apply(event.cmd);
       this.afterEngineEvents(events);
       if (this.mode === "synthetic") this.synthetic?.feedback(events);
@@ -405,10 +430,34 @@ export class Pipeline {
 
   fillFrame(buffer: ArrayBuffer): FrameMeta {
     const nowMs = Date.now();
-    const packed = packFrame(this.engine, buffer, (slot) => {
-      const at = this.restedAtMs.get(this.engine.store.id[slot]);
-      return at === undefined ? 0 : Math.max((nowMs - at) / 1000, 0);
-    });
+    // Keep the epoch young enough that Float32 still resolves the 120ms
+    // arrival ramp. A day in gives ~10ms of resolution; re-basing shifts
+    // every instance's stamp, so it counts as a book change.
+    if (nowMs - this.ageEpochMs > 86_400_000) {
+      this.ageEpochMs = nowMs;
+      this.invalidateFrame();
+    }
+    const nowSec = (nowMs - this.ageEpochMs) / 1000;
+
+    // The buffer carries the book state it was packed from. If that is still
+    // the live one, its bytes are still correct — nothing in them is derived
+    // from "now" — so the whole pack is skipped and the buffer goes back
+    // untouched. The renderer reads the same stamp and skips its upload.
+    const f32 = new Float32Array(buffer);
+    if (f32[Header.BookRevision] !== this.bookRevision) {
+      const packed = packFrame(this.engine, buffer, (slot) => {
+        const at = this.restedAtMs.get(this.engine.store.id[slot]);
+        if (at === undefined) return nowSec;
+        // Floored well before Float32 gets coarse. Anything this old is fully
+        // embered in the shader, so the clamp changes no pixel — and it must
+        // be a CONSTANT floor, not one relative to now, or an ancient order
+        // would re-write itself on every frame and defeat the whole point.
+        return Math.max((at - this.ageEpochMs) / 1000, -1_000_000);
+      });
+      this.lastCoreMedianSats = packed.coreMedianSats;
+      f32[Header.BookRevision] = this.bookRevision;
+      this.packTimes.push(nowMs);
+    }
 
     const glance = this.glance();
     this.detectors.glance(glance, nowMs);
@@ -419,6 +468,7 @@ export class Pipeline {
       seededFromLive: this.syntheticSeededFromLive,
       degraded: this.degraded,
       clock: this.clock(nowMs),
+      nowSec,
       events: this.renderEvents,
       droppedCancels: this.droppedCancels,
       tape: [...this.tape],
@@ -429,14 +479,27 @@ export class Pipeline {
         tradesPerMin: this.tradeTimes.filter((t) => nowMs - t < 60_000).length,
         orders: this.engine.store.size,
         anomalies: this.engine.unexpectedAnomalyCount(),
-        coreMedianSats: packed.coreMedianSats,
+        coreMedianSats: this.lastCoreMedianSats,
       },
       transition: this.transition,
+      packsPerSec: this.packRate(nowMs),
     };
     this.renderEvents = [];
     this.droppedCancels = 0;
     this.transition = null;
     return meta;
+  }
+
+  /** Mark the packed frame stale. Wrapped well inside Float32's exact-integer
+   * range, and only two buffers are ever in flight, so a stamp cannot survive
+   * a wrap and come back looking current. */
+  private invalidateFrame(): void {
+    this.bookRevision = (this.bookRevision % 8_388_607) + 1;
+  }
+
+  private packRate(nowMs: number): number {
+    this.packTimes = this.packTimes.filter((t) => nowMs - t < 1000);
+    return this.packTimes.length;
   }
 
   private glance(): BookGlance {

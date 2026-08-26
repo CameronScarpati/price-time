@@ -43,6 +43,20 @@ const BOOK: SeedOrder[] = [
 ];
 
 describe("packFrame content", () => {
+  it("packs an unchanged book to identical bytes", () => {
+    // The property the whole skip-the-work path rests on: nothing in a packed
+    // frame is derived from "now", so a book that has not moved packs the
+    // same twice. If this ever fails, the pipeline's revision check starts
+    // handing the renderer a frame that is stale rather than merely unchanged.
+    const engine = seededEngine(BOOK);
+    const a = new ArrayBuffer(FRAME_BYTES);
+    const b = new ArrayBuffer(FRAME_BYTES);
+    const restedAt = (slot: number) => engine.store.id[slot] * 1.5;
+    packFrame(engine, a, restedAt);
+    packFrame(engine, b, restedAt);
+    expect(new Uint8Array(b)).toEqual(new Uint8Array(a));
+  });
+
   it("packs every header field of the hand-built book exactly", () => {
     const engine = seededEngine(BOOK);
     const buffer = new ArrayBuffer(FRAME_BYTES);
@@ -80,7 +94,7 @@ describe("packFrame content", () => {
     packFrame(engine, buffer, () => 7);
     const f32 = new Float32Array(buffer);
 
-    // [tick, cumBefore, sats, side, ageSec, flags] per instance. Bids pack
+    // [tick, cumBefore, sats, side, restedAtSec, flags] per instance. Bids pack
     // first from the touch outward, then asks; within a level, queue order.
     const expected = [
       [6_503_790, 0, 100, Side.Bid, 7, 0],

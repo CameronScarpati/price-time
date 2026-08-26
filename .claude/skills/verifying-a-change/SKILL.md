@@ -32,7 +32,9 @@ gzip budget.
 - Desktop viewport AND a narrow one (`node tools/screenshot.mjs <url> out 20`
   captures rest, engaged, and phone states headlessly).
 - `?hud=1`: frame percentiles, msg rate, order count, anomaly count (should be
-  0 or single digits in live mode).
+  0 or single digits in live mode), and `packs/s` — well under 60 on a quiet
+  market, or the unchanged-book skip has been broken by something deriving a
+  per-frame value into the packed frame.
 - `?mode=synthetic&seed=42`: deterministic run for before/after comparison.
 - In a sandboxed environment, live mode needs the relay:
   `node tools/dev-relay.mjs` + `?ws=ws://localhost:8975&rest=http://localhost:8975/api/v2`.

@@ -471,7 +471,38 @@ parallel typed arrays for live cells (price tick, size, side/flags, age-base, qu
 offset — queue prefix-sums computed in the worker), a small event list for
 animation triggers (trades, arrivals, cancels since last frame), and a stats block
 (BBO, spread, depth, mode, clocks, divergence). Transferred, not copied; two
-buffers ping-pong so steady state allocates nothing. The renderer draws the latest
+buffers ping-pong so steady state allocates nothing.
+
+The "age-base" in that list is load bearing, and for a long time the code did
+not honour it: each instance carried its age at pack time, a number that
+changes every frame, so no two frames were ever identical even when the market
+had not moved. Instances now carry `restedAtSec` — a fact about the order,
+constant for as long as it rests — and the frame's clock rides in the meta,
+with the subtraction done once per vertex in the shader. The renderer still
+invents nothing: both numbers come from the worker.
+
+What that buys is the right to do nothing. Every packed frame is stamped with
+the book revision it describes, and on the next request the worker compares
+the stamp in the buffer handed back to it against the live book: if they
+match, the bytes are still correct and the whole pack is skipped, buffer
+returned untouched. The renderer reads the same stamp and skips its upload,
+and — when nothing on the presentation side moved either — the draw. That last
+one has two guards, because age drives brightness and the clock does advance:
+it waits until the book has been still for longer than the 120ms arrival ramp
+(so none is in flight), and it never lets a drawn frame get older than 100ms
+(so the 8s settle cannot visibly stall). Invalidation is deliberately blunt —
+any command reaching the engine, and any engine replacement, marks the frame
+stale, whether or not the book actually moved — because a rule you can check
+by reading one line beats one that needs every command's semantics audited.
+The failure it guards against is not a crash; it is a correct-looking book
+that is a moment behind the market.
+
+The saving scales with how quiet the market is, which is the right shape for
+this piece: at 60fps against the synthetic understudy's ~22 book changes a
+second, roughly two thirds of packs and uploads have nothing to do. A busy
+live feed at ~130 messages a second changes the book most frames and skips
+little. `?hud=1` reports `packs/s` against the ~60 requested, so the real
+number is readable on the device rather than argued about. The renderer draws the latest
 frame it has; if two arrive between paints it drops the stale one — **resting-book
 states coalesce; discrete trade events are never dropped** (they ride the event
 list, and nothing is dropped on the way in — though since the sprite layer was
