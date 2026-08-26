@@ -19,6 +19,9 @@ import { Overlay } from "./overlay";
  * is a ceiling on how CLOSE the camera may ever stand; the body-of-the-book
  * span normally binds well before it (~7-9 px/tick), and it exists so a
  * four-level book cannot become a close-up of four bricks. */
+/** Frame-time history the HUD reports over — ~10s at 60fps. */
+const FRAME_TIME_WINDOW = 600;
+
 const BIRDS_EYE = { frac: 0.82, minPpt: 0.05, maxPpt: 8 } as const;
 
 interface HeldFrame {
@@ -44,6 +47,8 @@ export class Renderer {
   readonly camera = new Camera();
 
   private latest: HeldFrame | null = null;
+  /** The frame whose instances are currently in the GPU buffer. */
+  private uploadedFrame: HeldFrame | null = null;
   private spare: ArrayBuffer | null = null;
   private requestInFlight = false;
 
@@ -61,6 +66,7 @@ export class Renderer {
   private lastFrameMs = 0;
   /** Frame-time ring for the HUD and the recorded budget numbers. */
   readonly frameTimesMs: number[] = [];
+  private frameTimeAt = 0;
 
   layoutParams: LayoutParams;
   bestBid = 0;
@@ -122,7 +128,10 @@ export class Renderer {
   tick(nowMs: number): void {
     const dtMs = this.lastFrameMs === 0 ? 16.7 : nowMs - this.lastFrameMs;
     this.lastFrameMs = nowMs;
-    if (this.frameTimesMs.push(dtMs) > 600) this.frameTimesMs.shift();
+    // Ring, not push/shift: Array#shift moves every element, and this runs on
+    // every frame of a piece that is otherwise doing almost nothing.
+    this.frameTimesMs[this.frameTimeAt] = dtMs;
+    this.frameTimeAt = (this.frameTimeAt + 1) % FRAME_TIME_WINDOW;
 
     if (!this.requestInFlight && this.spare !== null) {
       const buffer = this.spare;
@@ -206,6 +215,9 @@ export class Renderer {
       else dim = Math.sin(Math.PI * Math.min(t, 1));
     }
 
+    // The GPU already holds this frame's instances unless a new one arrived.
+    const fresh = this.uploadedFrame !== frame;
+    this.uploadedFrame = frame;
     this.cells.draw(f32, f32[Header.InstanceCount], {
       viewW: cssW, viewH: cssH,
       centerTick: p.centerTick, pxPerTick: p.pxPerTick, pxPerSat: p.pxPerSat,
@@ -215,7 +227,7 @@ export class Renderer {
       dpr: this.dpr,
       bandTopPx: p.layout === 1 ? 18 : 22,
       bandBottomPx: p.layout === 1 ? 58 : 46,
-    });
+    }, fresh);
 
     this.overlay.draw(p, this.bestBid, this.bestAsk, 2, this.delegate.chromeAlpha());
   }

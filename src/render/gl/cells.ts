@@ -228,18 +228,23 @@ export class CellPipeline {
     }
   }
 
-  draw(frame: Float32Array, instances: number, u: CellUniforms): void {
+  /** `upload` false re-draws the instance data already on the GPU — the same
+   * worker frame seen again, with only the camera moved under it. The live
+   * book is 8,768 orders, so that is a 210KB upload skipped. */
+  draw(frame: Float32Array, instances: number, u: CellUniforms, upload = true): void {
     const gl = this.gl;
     if (instances === 0) return;
     gl.useProgram(this.program);
     gl.bindVertexArray(this.vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.instanceBuffer);
-    const bytes = (FRAME_HEADER_FLOATS + instances * FRAME_STRIDE) * 4;
-    if (bytes > this.capacityBytes) {
-      gl.bufferData(gl.ARRAY_BUFFER, frame.byteLength, gl.DYNAMIC_DRAW);
-      this.capacityBytes = frame.byteLength;
+    if (upload) {
+      const bytes = (FRAME_HEADER_FLOATS + instances * FRAME_STRIDE) * 4;
+      if (bytes > this.capacityBytes) {
+        gl.bufferData(gl.ARRAY_BUFFER, frame.byteLength, gl.DYNAMIC_DRAW);
+        this.capacityBytes = frame.byteLength;
+      }
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, frame, 0, FRAME_HEADER_FLOATS + instances * FRAME_STRIDE);
     }
-    gl.bufferSubData(gl.ARRAY_BUFFER, 0, frame, 0, FRAME_HEADER_FLOATS + instances * FRAME_STRIDE);
     // Instance attributes start after the header.
     const strideBytes = FRAME_STRIDE * 4;
     for (let i = 0; i < FRAME_STRIDE; i++) {

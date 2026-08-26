@@ -17,12 +17,18 @@ const BOTTOM_BAND = 26;
 export class Overlay {
   private readonly ctx: CanvasRenderingContext2D;
   private dpr = 1;
+  /** True when the canvas currently holds nothing. This layer is invisible
+   * at rest, which for this piece is nearly always — and clearing it anyway
+   * costs a full dpr-squared clear AND marks the layer dirty, so the
+   * compositor re-uploads a blank canvas sixty times a second for nothing. */
+  private blank = true;
 
   constructor(private readonly canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext("2d")!;
   }
 
   resize(cssW: number, cssH: number, dpr: number): void {
+    this.blank = true; // sizing a canvas clears it
     this.canvas.width = Math.round(cssW * dpr);
     this.canvas.height = Math.round(cssH * dpr);
     this.dpr = dpr;
@@ -37,8 +43,12 @@ export class Overlay {
     alpha: number,
   ): void {
     const ctx = this.ctx;
+    const nothingToDraw = alpha <= 0.01 || bestBid === 0 || bestAsk === 0;
+    if (nothingToDraw && this.blank) return; // already empty: do not touch it
     ctx.clearRect(0, 0, p.viewW, p.viewH);
-    if (alpha <= 0.01 || bestBid === 0 || bestAsk === 0) return;
+    this.blank = true;
+    if (nothingToDraw) return;
+    this.blank = false;
     ctx.globalAlpha = alpha;
     ctx.font = "11px ui-monospace, SFMono-Regular, Menlo, monospace";
     ctx.lineJoin = "round";
@@ -104,7 +114,9 @@ export class Overlay {
     const spread = bestAsk - bestBid;
     // Visible gap = spread minus the touch rows' own height (cells.ts rowH):
     // at deep zoom a 1-tick spread is 1px of dark, not pxPerTick worth.
-    const rowH = p.pxPerTick >= 3 ? Math.max(p.pxPerTick - 1, 2.6) : p.pxPerTick * 0.86;
+    // Lockstep with cells.ts, snapped device rounding included.
+    const rawRowH = p.pxPerTick >= 3 ? Math.max(p.pxPerTick - 1, 2.6) : p.pxPerTick * 0.86;
+    const rowH = Math.max(Math.floor(rawRowH * this.dpr + 0.5), 1) / this.dpr;
     const gapPx = spread * p.pxPerTick - rowH;
     ctx.textBaseline = "middle";
     ctx.font = "12px ui-monospace, SFMono-Regular, Menlo, monospace";
