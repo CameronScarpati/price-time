@@ -225,7 +225,6 @@ function boot(): void {
     stats: () => renderer.frameStats(),
     book: () => ({ bestBid: renderer.bestBid, bestAsk: renderer.bestAsk }),
     frame: () => renderer.debugFrame(),
-    sprites: () => renderer.spriteSnapshot(),
   };
 }
 

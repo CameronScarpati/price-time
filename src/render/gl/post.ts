@@ -8,8 +8,8 @@ import { createProgram } from "./context";
  *
  * (Lineage, all owner-verified on hardware: a phosphor FADE pass — removed,
  * afterimage smearing; a luminous spread MEMBRANE — removed, the owner
- * wants no glow behind the field at all. Decay belongs to discrete event
- * sprites; light belongs to the cells themselves.)
+ * wants no glow behind the field at all. Nothing decays over the field any
+ * more either; light belongs to the cells themselves.)
  */
 
 const VS = `#version 300 es

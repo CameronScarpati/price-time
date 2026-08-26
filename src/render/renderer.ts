@@ -1,4 +1,3 @@
-import { Side, opposite } from "../engine/types";
 import {
   FRAME_BYTES, FRAME_HEADER_FLOATS, FRAME_STRIDE, Header,
   type FrameMeta, type MainToWorker, type WorkerToMain,
@@ -6,16 +5,14 @@ import {
 import { Camera } from "./camera";
 import { CellPipeline } from "./gl/cells";
 import { PostPipeline } from "./gl/post";
-import { SpriteKind, SpritePipeline, type Sprite } from "./gl/sprites";
-import { tickToY, type LayoutParams } from "./layout";
+import type { LayoutParams } from "./layout";
 import { Overlay } from "./overlay";
 
 /**
- * The main-thread renderer: draws the worker's latest frame, owns every
- * presentation clock (camera springs, flash decays, stagger offsets, the
- * mode-transition dip), and nothing else — it cannot invent a price, a size,
- * or an ordering, because everything it draws comes out of the transferred
- * frame or the event list attached to it.
+ * The main-thread renderer: draws the worker's latest frame, owns the two
+ * presentation clocks left (the camera's framing and the mode-transition
+ * dip), and nothing else — it cannot invent a price, a size, or an
+ * ordering, because everything it draws comes out of the transferred frame.
  */
 
 interface HeldFrame {
@@ -36,7 +33,6 @@ export interface RendererDelegate {
 export class Renderer {
   private readonly gl: WebGL2RenderingContext;
   private readonly cells: CellPipeline;
-  private readonly spritesGl: SpritePipeline;
   private readonly postFx: PostPipeline;
   private readonly overlay: Overlay;
   readonly camera = new Camera();
@@ -45,7 +41,6 @@ export class Renderer {
   private spare: ArrayBuffer | null = null;
   private requestInFlight = false;
 
-  private sprites: Sprite[] = [];
   private pxPerSat = 42 / 8_000_000;
   private transitionStartMs = 0;
   private dpr = 1;
@@ -78,7 +73,6 @@ export class Renderer {
     if (gl === null) throw new Error("WebGL2 unavailable");
     this.gl = gl;
     this.cells = new CellPipeline(gl);
-    this.spritesGl = new SpritePipeline(gl);
     this.postFx = new PostPipeline(gl);
     this.overlay = new Overlay(overlayCanvas);
     this.layoutParams = {
@@ -147,7 +141,7 @@ export class Renderer {
     if (!frame.consumed) {
       frame.consumed = true;
       this.measureOccupancy(frame.f32);
-      this.consumeMeta(frame, nowMs, reduced);
+      this.consumeMeta(frame.meta, nowMs);
     }
 
     const f32 = frame.f32;
@@ -259,96 +253,16 @@ export class Renderer {
       bandBottomPx: p.layout === 1 ? 58 : 46,
     });
 
-    this.advanceSprites(nowMs);
-    this.spritesGl.draw(this.sprites, cssW, cssH, this.dpr);
     this.overlay.draw(p, this.bestBid, this.bestAsk, 2, this.delegate.chromeAlpha());
   }
 
-  private consumeMeta(frame: HeldFrame, nowMs: number, reduced: boolean): void {
-    const meta = frame.meta;
+  /** A new worker frame's metadata: the UI's cue, and the mode-transition
+   * dip's start. Discrete events no longer spawn anything to draw — a trade
+   * is visible as the bar it consumed getting shorter, and a cancel as the
+   * cell going; both are the book itself changing, not an effect over it. */
+  private consumeMeta(meta: FrameMeta, nowMs: number): void {
     if (meta.transition !== null) this.transitionStartMs = nowMs;
     this.delegate.onMeta(meta);
-
-    // Level totals for every tick an event touched this frame, read off the
-    // packed (post-event) frame. The bite flash covers exactly the span the
-    // level LOST — from today's bar end outward by the consumed amount — so
-    // it always sits flush against a bar, never floating in empty space.
-    // Cancel ghosts anchor the same way (below). One pass over the
-    // instances, only when events happened.
-    const levelTotals = new Map<number, number>();
-    for (const event of meta.events) {
-      if (event.kind === "trade") {
-        levelTotals.set(event.tick * 2 + opposite(event.aggressor), 0);
-      } else {
-        levelTotals.set(event.tick * 2 + event.side, 0);
-      }
-    }
-    if (levelTotals.size > 0) {
-      const f32 = frame.f32;
-      const count = f32[Header.InstanceCount];
-      for (let i = 0; i < count; i++) {
-        const base = FRAME_HEADER_FLOATS + i * FRAME_STRIDE;
-        const key = f32[base] * 2 + f32[base + 3];
-        const cur = levelTotals.get(key);
-        if (cur !== undefined) levelTotals.set(key, cur + f32[base + 2]);
-      }
-    }
-
-    // Spawn the decays of this frame's discrete events. Trades all get drawn
-    // — staggered inside the burst so a sweep reads as a run, not a blob.
-    let tradeIndex = 0;
-    for (const event of meta.events) {
-      const p = this.layoutParams;
-      const y = tickToY(event.tick, p);
-      if (y < -40 || y > p.viewH + 40) continue;
-      if (event.kind === "trade") {
-        const makerSide = opposite(event.aggressor);
-        const dir = p.layout === 1 ? 1 : makerSide === Side.Bid ? -1 : 1;
-        const total = levelTotals.get(event.tick * 2 + makerSide) ?? 0;
-        const x = p.seamX + dir * total * this.pxPerSat;
-        if (x < -40 || x > p.viewW + 40) continue;
-        this.sprites.push({
-          xPx: x, yPx: y,
-          // Signed width IS the consumed quantity in the length lens (floor
-          // so dust trades stay visible); height is the row itself. The
-          // reduced-motion ring keeps its compact √quantity footprint.
-          sizePx: reduced
-            ? dir * Math.min(8 + Math.sqrt(event.sats * this.pxPerSat) * 1.5, 22)
-            : dir * Math.min(Math.max(event.sats * this.pxPerSat, 2), p.viewW),
-          hPx: Math.min(Math.max(p.pxPerTick * 0.9, 1.5), 36),
-          age01: 0,
-          kind: reduced ? SpriteKind.Ring : SpriteKind.Bite,
-          tint: event.liquidation ? 2 : event.aggressor === Side.Bid ? 1 : 0,
-          delayMs: reduced ? 0 : Math.min(tradeIndex++ * 45, 220),
-          bornMs: nowMs,
-          lifeMs: reduced ? 1600 : 220,
-        });
-      } else if (!reduced) {
-        const dir = p.layout === 1 ? 1 : event.side === Side.Bid ? -1 : 1;
-        // Anchor flush against the SURVIVING bar's end, exactly like the
-        // bite: the queue compacts under the ghost the same frame, so the
-        // dead order's historical offset (aheadSats) points at re-occupied
-        // cells mid-queue and at empty void for tail deaths — the audited
-        // "orphaned dash floating in space". The visible change IS the bar
-        // end retreating; the sigh sits on it.
-        const total = levelTotals.get(event.tick * 2 + event.side) ?? 0;
-        const ghostPx = Math.max(3, Math.min(event.sats * this.pxPerSat, 14));
-        const x = p.seamX + dir * (total * this.pxPerSat + ghostPx / 2);
-        // Footprint tied to the dead order's real on-screen length — the old
-        // +4px floor made dust cancels puff far larger than the cell that
-        // vanished.
-        this.sprites.push({
-          xPx: x, yPx: y,
-          sizePx: ghostPx,
-          hPx: 0,
-          age01: 0,
-          kind: SpriteKind.Ghost,
-          tint: event.side === Side.Bid ? 0 : 1,
-          delayMs: 0, bornMs: nowMs, lifeMs: 150,
-        });
-      }
-    }
-    if (this.sprites.length > 480) this.sprites.splice(0, this.sprites.length - 480);
   }
 
   /**
@@ -407,19 +321,6 @@ export class Renderer {
       Math.min(bidDeep, bidFirst + 8),
       Math.min(askDeep, askFirst + 8),
     );
-  }
-
-  private advanceSprites(nowMs: number): void {
-    for (const s of this.sprites) {
-      s.age01 = (nowMs - s.bornMs - s.delayMs) / s.lifeMs;
-      if (s.age01 < 0) s.age01 = -1; // waiting for its stagger slot
-    }
-    this.sprites = this.sprites.filter((s) => s.age01 <= 1);
-  }
-
-  /** Dev hook: live event sprites (kind/age), for headless verification. */
-  spriteSnapshot(): { kind: number; age: number }[] {
-    return this.sprites.map((s) => ({ kind: s.kind, age: s.age01 }));
   }
 
   /** Dev hook: the latest frame's header and a sample of instances. */
