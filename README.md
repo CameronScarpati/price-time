@@ -87,10 +87,15 @@ at the center of the screen, not a shrunken desktop.*
 
 ```
 pnpm install
-pnpm dev        # open http://localhost:5173
-pnpm test       # engine invariants, reconstruction golden tests, determinism
-pnpm build      # static site in dist/; deploys to any static host
+pnpm dev
+pnpm test
+pnpm build
 ```
+
+`pnpm dev` serves the piece at http://localhost:5173. `pnpm test` runs the
+engine invariants, the reconstruction golden tests, and the determinism
+suite. `pnpm build` writes a static site to `dist/` that deploys to any
+static host.
 
 Useful URL parameters: `?hud=1` (frame-time HUD) · `?mode=synthetic&seed=42`
 (deterministic simulation) · `?mode=replay` (bundled recorded session).
