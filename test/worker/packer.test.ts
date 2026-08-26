@@ -62,11 +62,10 @@ describe("packFrame content", () => {
     // Near band = mid * 0.0015 ~ 9756 ticks: the whole book is inside it.
     expect(f32[Header.BidDepthNearSats]).toBe(850);
     expect(f32[Header.AskDepthNearSats]).toBe(1350);
-    // spanHint: bidAt = bids.ticks[max(2-4,0)] = 6503780,
-    // askAt = asks.ticks[min(3,1)] = 6503820, spread = 10;
-    // toFourth = max(15, 25, 18) = 25; min(25, max(40, 30)) * 1.15 = 28.75
-    // (exact in f32: 0.75 is a dyadic fraction).
-    expect(f32[Header.SpanHintTicks]).toBe(28.75);
+    // spanHint (bird's eye): extentHalf = max(mid - lo, hi - mid)
+    // = max(15, 25) = 25; the price bound is max(6503795 * 5e-5, 200)
+    // = 325.18…, far wider, so the book's own extent is what frames it.
+    expect(f32[Header.SpanHintTicks]).toBe(25);
     // Level totals in pack order: bids-from-touch [350, 500], asks [350, 1000];
     // sorted [350, 350, 500, 1000]; index min(floor(4*0.8), 3) = 3.
     expect(f32[Header.CoreLevelP80Sats]).toBe(1000);
@@ -113,6 +112,39 @@ describe("packFrame content", () => {
     expect(f32[Header.CoreLevelP80Sats]).toBe(20_000_000);
     expect(f32[Header.LoTick]).toBe(0);
     expect(f32[Header.HiTick]).toBe(0);
+  });
+
+  it("bounds the bird's-eye span against a fishing order, and frames a small book whole", () => {
+    // Real BTC/USD rests asks past $21M and bids at a cent, so the book's
+    // extent is a useless framing target on its own — the header's own
+    // LoTick/HiTick here span 2.15 BILLION ticks. The span must fall back
+    // to the price bound instead of squashing the market into one line.
+    const far = seededEngine([
+      ...BOOK,
+      { id: 7, side: Side.Ask, tick: 2_100_000_000, sats: 1, micro: 16 },
+      { id: 8, side: Side.Bid, tick: 1, sats: 1, micro: 17 },
+    ]);
+    const buffer = new ArrayBuffer(FRAME_BYTES);
+    packFrame(far, buffer, () => 0);
+    const f32 = new Float32Array(buffer);
+    // mid is unchanged at 6503795: the fishing orders are far outside the
+    // touch. Bound = max(mid * 5e-5, 200) = 325.18…
+    expect(f32[Header.MidTick]).toBe(6_503_795);
+    expect(f32[Header.SpanHintTicks]).toBeCloseTo(6_503_795 * 5e-5, 3);
+    // The extent still crosses whole, for the pan clamp — it is bounded for
+    // FRAMING only, never trimmed as data.
+    expect(f32[Header.LoTick]).toBe(1);
+    expect(f32[Header.HiTick]).toBe(2_100_000_000);
+
+    // And the other direction: a book far smaller than the bound is framed
+    // by its own extent, so a quiet market reads as a quiet market rather
+    // than being zoomed up to fill the screen.
+    const tight = seededEngine([
+      { id: 1, side: Side.Bid, tick: 6_503_790, sats: 100, micro: 10 },
+      { id: 2, side: Side.Ask, tick: 6_503_800, sats: 100, micro: 11 },
+    ]);
+    packFrame(tight, buffer, () => 0);
+    expect(f32[Header.SpanHintTicks]).toBe(24); // floor; extentHalf = 5
   });
 
   it("drops only the far tail at the instance cap, and reports the drop", () => {

@@ -15,6 +15,9 @@ import { Overlay } from "./overlay";
  * ordering, because everything it draws comes out of the transferred frame.
  */
 
+/** The one framing profile, both layouts. See the camera's follow(). */
+const BIRDS_EYE = { frac: 0.82, minPpt: 0.05, maxPpt: 4 } as const;
+
 interface HeldFrame {
   buffer: ArrayBuffer;
   f32: Float32Array;
@@ -44,14 +47,6 @@ export class Renderer {
   private pxPerSat = 42 / 8_000_000;
   private transitionStartMs = 0;
   private dpr = 1;
-
-  // Bimodal framing state, measured from the transferred frame (facts the
-  // worker packed — the renderer derives a standpoint, never market state).
-  // A skeletal book (a handful of populated levels near the touch) gets a
-  // committed close-up of the queue; a dense book keeps the wide standpoint.
-  private skeletal = false;
-  private touchLevels = 99;
-  private occupiedHalfSpanTicks = 0;
 
   private lastFrameMs = 0;
   /** Frame-time ring for the HUD and the recorded budget numbers. */
@@ -140,7 +135,6 @@ export class Renderer {
     if (frame === null) return;
     if (!frame.consumed) {
       frame.consumed = true;
-      this.measureOccupancy(frame.f32);
       this.consumeMeta(frame.meta, nowMs);
     }
 
@@ -157,52 +151,17 @@ export class Renderer {
     // provenance and safe area occupy the bottom. Lockstep: layout.ts reads
     // this and cells.ts receives it as uCenterYPx.
     p.centerYFrac = p.layout === 1 ? 0.44 : 0.5;
-    // Framing is bimodal on occupancy. Dense books: a phone frames far more
-    // of the field, smaller; a desktop sits closer. Skeletal books (live
-    // quiet hours): the close-up of the queue IS the composition — frame the
-    // occupied cluster itself and let the rows become countable bricks.
-    // Hysteresis so the regime change is one slow camera breath, not a
-    // flicker; the spring makes it presentation either way.
-    if (this.skeletal) {
-      if (this.touchLevels >= 10) this.skeletal = false;
-    } else if (this.touchLevels < 8) {
-      this.skeletal = true;
-    }
+    // One standpoint, always: the bird's eye the worker sized (packer.ts).
+    // The bimodal dense/skeletal framing that used to live here is gone —
+    // it re-chose how close to stand every time occupancy crossed a
+    // threshold, and a standpoint that re-chooses itself is what made the
+    // piece feel like it was chasing the market instead of showing it.
+    // maxPpt is the whole point: it is a ceiling on how CLOSE the camera may
+    // ever stand, so a thin book is a wide frame with space in it, never a
+    // close-up of three bricks. minPpt is left far below any real fit so
+    // legibility can never argue the frame narrower than the book.
     const spreadTicks = f32[Header.SpreadTicks];
-    const spanHint = f32[Header.SpanHintTicks];
-    const denseProfile =
-      p.layout === 1
-        ? { frac: 0.62, minPpt: 2.2, maxPpt: 10 }
-        : { frac: 0.76, minPpt: 4.5, maxPpt: 14 };
-    let profile = denseProfile;
-    let halfSpan = spanHint;
-    // A crossed book (external transient) has no meaningful touch cluster to
-    // frame — a close-up on its phantom mid frames pure void. Dense
-    // standpoint only until it uncrosses.
-    if (this.skeletal && spreadTicks > 0) {
-      // Frame the occupied cluster itself — but the close-up may only ever
-      // stand CLOSER than the dense standpoint (a skeletal book whose few
-      // levels still fill the near band keeps today's exact framing). The
-      // touch cap inside the camera still guarantees both bests fit.
-      // Phone close-up eased after hands-on feedback: monumental two-row
-      // bricks read intentional but gave the viewer nothing to explore.
-      const close =
-        p.layout === 1
-          ? { frac: 0.55, minPpt: 2.2, maxPpt: 13 }
-          : { frac: 0.5, minPpt: 4.5, maxPpt: 32 };
-      const nearHalf = Math.max(this.occupiedHalfSpanTicks * 1.1, spreadTicks * 0.8, 6);
-      // Mirror of camera.follow's fit — evaluated for both standpoints so
-      // the tighter one wins.
-      const fit = (frac: number, min: number, max: number, half: number) =>
-        Math.min(Math.max((cssH * frac) / Math.max(half * 2, 12), min), max);
-      const pptDense = fit(denseProfile.frac, denseProfile.minPpt, denseProfile.maxPpt, spanHint);
-      const pptClose = fit(close.frac, close.minPpt, close.maxPpt, nearHalf);
-      if (pptClose > pptDense) {
-        profile = close;
-        halfSpan = nearHalf;
-      }
-    }
-    this.camera.follow(mid, halfSpan, spreadTicks, cssH, profile);
+    this.camera.follow(mid, f32[Header.SpanHintTicks], spreadTicks, cssH, BIRDS_EYE);
     this.camera.setBounds(f32[Header.LoTick], f32[Header.HiTick]);
     this.camera.update(dtMs, nowMs, reduced);
 
@@ -215,15 +174,6 @@ export class Renderer {
     if (p.layout === 1) {
       const p80Level = Math.max(f32[Header.CoreLevelP80Sats], 200_000);
       targetPxPerSat = (cssW * 0.62) / p80Level;
-    } else if (profile !== denseProfile) {
-      // Skeletal close-up: the vertical zoom committed to the queue, so the
-      // horizontal scale must follow — a typical touch row reaches ~42% of
-      // the frame from the seam instead of floating as a 100px pill. Same
-      // truth-sanctioned length lens, wider aperture; never below the dense
-      // scale.
-      const p80Level = Math.max(f32[Header.CoreLevelP80Sats], 200_000);
-      const coreMedian = Math.max(frame.meta.stats.coreMedianSats, 50_000);
-      targetPxPerSat = Math.max((cssW * 0.42) / p80Level, 26 / coreMedian);
     } else {
       const coreMedian = Math.max(frame.meta.stats.coreMedianSats, 50_000);
       targetPxPerSat = 26 / coreMedian;
@@ -263,64 +213,6 @@ export class Renderer {
   private consumeMeta(meta: FrameMeta, nowMs: number): void {
     if (meta.transition !== null) this.transitionStartMs = nowMs;
     this.delegate.onMeta(meta);
-  }
-
-  /**
-   * Camera-framing statistics read off the transferred frame: how many
-   * occupied levels sit within the near band of the touch, and how far the
-   * farthest of them reaches. Purely a standpoint input (presentation) —
-   * every number is already in the frame; nothing is invented. Instances
-   * are packed per side touch-outward, so distinct ticks arrive in
-   * distance order and each side's scan can stop at the band edge; levels
-   * beyond the band never widen the close-up (they are the far
-   * constellation, left to the viewer's own zoom-out).
-   */
-  private measureOccupancy(f32: Float32Array): void {
-    const count = f32[Header.InstanceCount];
-    const mid = f32[Header.MidTick];
-    if (mid === 0 || count === 0) return; // keep the last regime while seeding
-    const band = Math.max(4 * f32[Header.SpreadTicks], 30);
-    let nearBid = 0, nearAsk = 0;
-    let bidFirst = 0, bidDeep = 0, askFirst = 0, askDeep = 0;
-    let lastBidTick = NaN, lastAskTick = NaN;
-    let bidBeyond = false;
-    for (let i = 0; i < count; i++) {
-      const base = FRAME_HEADER_FLOATS + i * FRAME_STRIDE;
-      const tick = f32[base];
-      if (f32[base + 3] < 0.5) {
-        if (bidBeyond || tick === lastBidTick) continue;
-        lastBidTick = tick;
-        const dist = mid - tick;
-        if (dist <= band) {
-          nearBid++;
-          if (nearBid === 1) bidFirst = dist;
-          if (nearBid <= 3) bidDeep = dist;
-        } else {
-          bidBeyond = true; // bids descend; nothing nearer follows
-        }
-      } else {
-        if (tick === lastAskTick) continue;
-        lastAskTick = tick;
-        const dist = tick - mid;
-        if (dist <= band) {
-          nearAsk++;
-          if (nearAsk === 1) askFirst = dist;
-          if (nearAsk <= 3) askDeep = dist;
-        } else {
-          break; // asks ascend; nothing nearer follows
-        }
-      }
-    }
-    this.touchLevels = nearBid + nearAsk;
-    // Each side contributes its queue FRONT plus breathing room: up to the
-    // 3rd in-band level, but never chasing one more than ~8 ticks past the
-    // best — the touch is the subject; an in-band stray is already the far
-    // constellation and may fall off the close-up (only the bests are
-    // guaranteed in frame, by the camera's touch cap).
-    this.occupiedHalfSpanTicks = Math.max(
-      Math.min(bidDeep, bidFirst + 8),
-      Math.min(askDeep, askFirst + 8),
-    );
   }
 
   /** Dev hook: the latest frame's header and a sample of instances. */

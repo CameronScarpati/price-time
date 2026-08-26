@@ -73,37 +73,39 @@ export function packFrame(
   const bestBid = engine.bestBid();
   const bestAsk = engine.bestAsk();
 
-  // Camera span hint: distance from mid to the ~4th occupied level on each
-  // side, so the frame always holds a populated neighborhood. Four, not more:
-  // real levels scatter tens of ticks apart even on dense days, and framing
-  // many of them squeezes rows below legibility — queue cells are the point.
-  let spanHint = 30;
-  if (bestBid !== undefined && bestAsk !== undefined) {
-    const mid = (bestBid + bestAsk) / 2;
-    const bidTicks = engine.bids.ticks;
-    const askTicks = engine.asks.ticks;
-    const bidAt = bidTicks[Math.max(bidTicks.length - 4, 0)];
-    const askAt = askTicks[Math.min(3, askTicks.length - 1)];
-    const spread = bestAsk - bestBid;
-    const toFourth = Math.max(mid - bidAt, askAt - mid, spread + 8);
-    // On a skeletal book the 4th level can sit hundreds of ticks out;
-    // framing it fills the screen with void. Cap the frame at a few spreads
-    // around the touch — the queue there is the piece — and leave the far
-    // constellation to the viewer's own zoom-out.
-    spanHint = Math.min(toFourth, Math.max(spread * 4, 30)) * 1.15;
-  }
-  f32[Header.SpanHintTicks] = spanHint;
-  f32[Header.CoreLevelP80Sats] = coreLevelP80;
-
-  // Book extent for the camera's pan clamp. Both sides' tick arrays are
-  // sorted ascending, so the ends are O(1): deepest bid (or the whole book's
-  // low) first, farthest ask (or high) last.
+  // Book extent for the camera: deepest bid (or the whole book's low) and
+  // farthest ask, O(1) off the ends of the ascending tick arrays.
   const bt = engine.bids.ticks;
   const at = engine.asks.ticks;
   const lows = [bt[0], at[0]].filter((t) => t !== undefined);
   const highs = [bt[bt.length - 1], at[at.length - 1]].filter((t) => t !== undefined);
-  f32[Header.LoTick] = lows.length > 0 ? Math.min(...lows) : 0;
-  f32[Header.HiTick] = highs.length > 0 ? Math.max(...highs) : 0;
+  const loTick = lows.length > 0 ? Math.min(...lows) : 0;
+  const hiTick = highs.length > 0 ? Math.max(...highs) : 0;
+  f32[Header.LoTick] = loTick;
+  f32[Header.HiTick] = hiTick;
+
+  // Camera span hint: a BIRD'S EYE. The frame holds the book, not a close-up
+  // of the touch, and it holds the same amount of book from one minute to
+  // the next — a standpoint that keeps re-choosing itself is the thing that
+  // made the piece restless.
+  //
+  // Start from the book's own extent, then bound it, because a real book's
+  // far constellation is not a neighborhood: BTC/USD rests asks past $21M
+  // and bids at a cent, so the true extent runs to tens of billions of ticks
+  // and framing it would squash the entire market into one line. The bound
+  // is a fraction of the PRICE, not of the spread — price is the instrument's
+  // own scale and it barely moves, where the spread breathes every second and
+  // would drag the standpoint with it. At BTC's price this is a few dollars
+  // either side of mid; a book that fits inside it (the synthetic
+  // understudy, a quiet venue) is framed whole.
+  let spanHint = 30;
+  if (bestBid !== undefined && bestAsk !== undefined) {
+    const mid = (bestBid + bestAsk) / 2;
+    const extentHalf = Math.max(mid - loTick, hiTick - mid);
+    spanHint = Math.max(Math.min(extentHalf, Math.max(mid * 5e-5, 200)), 24);
+  }
+  f32[Header.SpanHintTicks] = spanHint;
+  f32[Header.CoreLevelP80Sats] = coreLevelP80;
 
   f32[Header.InstanceCount] = instances;
   f32[Header.BestBidTick] = bestBid ?? 0;

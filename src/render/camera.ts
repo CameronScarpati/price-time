@@ -64,14 +64,11 @@ export class Camera {
   ): void {
     if (midTick === 0) return;
     this.targetCenter = midTick;
-    // Fit the populated neighborhood (worker's span hint) into a fraction of
-    // the height, prefer legible rows — but cap so the touch (both bests
-    // plus margin) always fits the frame. The profile differs by viewport:
-    // a phone frames far more context, smaller (hands-on feedback: default
-    // phone framing once felt like staring at three bricks).
-    // Floor at 12 ticks so a skeletal book's close-up profile can actually
-    // commit to the queue; dense profiles hit their maxPpt long before this
-    // floor matters, so their framing is unchanged.
+    // Fit the worker's bird's-eye span into a fraction of the height. The
+    // profile's maxPpt is a ceiling on how CLOSE the camera may stand, so a
+    // book smaller than the frame sits inside it with room around it rather
+    // than being zoomed up to fill it. The touch cap still binds on top:
+    // both bests fit, always, whatever the span says.
     this.viewH = viewH;
     const span = Math.max(halfSpanTicks * 2, 12);
     let ppt = Math.min(Math.max((viewH * profile.frac) / span, profile.minPpt), profile.maxPpt);

@@ -36,9 +36,9 @@ export const Header = {
   SpreadTicks: 4,
   BidDepthNearSats: 5,
   AskDepthNearSats: 6,
-  /** Camera hint: half-span (ticks from mid) that keeps ~15 occupied levels
-   * per side in frame. Books are gappy — a fixed tick span frames nothing on
-   * a thin day and a wall on a dense one. */
+  /** Camera hint: half-span (ticks from mid) for the bird's-eye standpoint —
+   * the book's own extent, bounded by a fraction of the price so the far
+   * constellation cannot squash the market into a line. See packer.ts. */
   SpanHintTicks: 7,
   /** 80th-percentile LEVEL depth among the top levels — the spine layout's
    * width scale, so a typical row spans most of a phone screen instead of
@@ -46,7 +46,8 @@ export const Header = {
   CoreLevelP80Sats: 8,
   /** Extent of the resting book: lowest and highest occupied tick across
    * both sides (0/0 while empty). The camera's pan clamp — the viewer may
-   * wander a little past the last order, never into the void beyond. */
+   * wander a little past the last order, never into the void beyond — and
+   * the raw material of the bird's-eye span above. */
   LoTick: 9,
   HiTick: 10,
 } as const;
