@@ -58,9 +58,9 @@ html, body {
 .mode-dot[data-mode="live"] { background: #34d399; border-radius: 50%; }
 .mode-dot[data-mode="synthetic"] { background: #c084fc; border-radius: 1px; transform: rotate(45deg); }
 .mode-dot[data-mode="replay"] { background: #60a5fa; border-radius: 1px; }
-.mode-dot.degraded { animation: dot-breathe 1.6s ease-in-out infinite; }
-@keyframes dot-breathe { 50% { opacity: 0.35; } }
-@media (prefers-reduced-motion: reduce) { .mode-dot.degraded { animation: none; opacity: 0.6; } }
+/* Degraded (seeding, a gap) is a held, dimmed dot: a state, not a pulse. A
+ * perpetual animation is motion no market event caused. */
+.mode-dot.degraded { opacity: 0.6; }
 
 /* --- chrome: appears with engagement, leaves with idleness --------------- */
 
@@ -146,7 +146,11 @@ html, body {
 .follow-chip.show { opacity: 1; pointer-events: auto; }
 .follow-chip:focus-visible { outline: 2px solid #60a5fa; outline-offset: 1px; }
 
-/* --- captions: the piece narrating itself -------------------------------- */
+/* --- captions: the piece narrating itself, only while engaged ------------- */
+
+/* Carries the chrome's alpha (ui.ts); the caption inside carries its own fade.
+ * Covers the app exactly, so the caption's own placement is unchanged. */
+.caption-band { position: absolute; inset: 0; pointer-events: none; opacity: 0; }
 
 .caption {
   position: absolute;
@@ -170,10 +174,11 @@ html, body {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* Fades in place: no rise. Opacity only. */
 .caption-show { animation: caption 6s ease-out forwards; }
 @keyframes caption {
-  0% { opacity: 0; transform: translateX(-50%) translateY(4px); }
-  6% { opacity: 1; transform: translateX(-50%) translateY(0); }
+  0% { opacity: 0; }
+  6% { opacity: 1; }
   80% { opacity: 1; }
   100% { opacity: 0; }
 }

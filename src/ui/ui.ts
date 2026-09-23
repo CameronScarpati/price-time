@@ -31,6 +31,33 @@ const MODE_LABEL_SHORT: Record<string, string> = {
   replay: "replay — recorded Bitstamp BTC/USD flow",
 };
 
+/** A full chrome fade, 0 to 1 or back. A partial one (the target flipped
+ * mid-fade) travels the same straight line for its shorter distance. */
+export const CHROME_FADE_MS = 200;
+
+/** Where the chrome fade stands: the alpha it left from, the alpha it is
+ * going to, and when it left. */
+export interface ChromeFade {
+  from: number;
+  to: number;
+  atMs: number;
+}
+
+/** Alpha of a chrome fade at `nowMs`: a straight line at one full fade per
+ * `fullMs`, landing EXACTLY on its target and holding there. A pure function
+ * of the clock, so asking twice in a frame changes nothing, and the settled
+ * value is bitwise stable — which is what lets the renderer's unchanged-frame
+ * skip fire again once the chrome has finished moving. (The ease this
+ * replaced stepped 12% of the remaining distance per call: it never arrived,
+ * and it ran twice as fast once the renderer asked twice a frame.) A
+ * `fullMs` of 0 cuts: the reduced-motion fade. */
+export function chromeFadeAlpha(fade: ChromeFade, nowMs: number, fullMs: number): number {
+  const travelled = fullMs > 0 ? Math.max(nowMs - fade.atMs, 0) / fullMs : Infinity;
+  return fade.to >= fade.from
+    ? Math.min(fade.from + travelled, fade.to)
+    : Math.max(fade.from - travelled, fade.to);
+}
+
 const el = <K extends keyof HTMLElementTagNameMap>(
   tag: K, className: string, parent: HTMLElement, text = "",
 ): HTMLElementTagNameMap[K] => {
@@ -43,7 +70,12 @@ const el = <K extends keyof HTMLElementTagNameMap>(
 
 export class Ui {
   private chromeVisibleUntil = 0;
+  private fade: ChromeFade = { from: 0, to: 0, atMs: 0 };
   private alpha = 0;
+  /** The alpha last written to the DOM; NaN so the first call writes. */
+  private writtenAlpha = NaN;
+  /** True from a caption's start until the chrome has fully hidden. */
+  private captionLive = false;
   private paused = false;
   private lastCaptionId = 0;
   private lastNarration = "";
@@ -60,6 +92,7 @@ export class Ui {
   private readonly provenance: HTMLElement;
   private readonly modeDot: HTMLElement;
   private readonly modeText: HTMLElement;
+  private readonly captionBand: HTMLElement;
   private readonly caption: HTMLElement;
   private readonly controls: HTMLElement;
   private readonly followChip: HTMLButtonElement;
@@ -82,7 +115,12 @@ export class Ui {
     this.modeDot = el("span", "mode-dot", this.provenance);
     this.modeText = el("span", "", this.provenance);
 
-    this.caption = el("div", "caption", root);
+    // The band carries the chrome's alpha and the caption inside it carries
+    // its own fade, so a caption leaving with the chrome is the product of
+    // the two — never a pop. (A CSS animation outranks an inline opacity, so
+    // they cannot share one element.)
+    this.captionBand = el("div", "caption-band", root);
+    this.caption = el("div", "caption", this.captionBand);
     this.caption.setAttribute("aria-hidden", "true");
 
     this.controls = el("div", "controls chrome", root);
@@ -128,14 +166,36 @@ export class Ui {
     // The follow chip rides its own logic: visible whenever the viewer has
     // panned away, regardless of chrome idle state — it IS the way back.
     this.followChip.classList.toggle("show", this.renderer().camera.detached);
-    const target = performance.now() < this.chromeVisibleUntil ? 1 : 0;
-    this.alpha += (target - this.alpha) * (this.reduced ? 1 : 0.12);
-    const panels = [this.controls, this.tapePanel];
-    for (const p of panels) {
-      p.style.opacity = String(this.alpha);
-      p.style.pointerEvents = this.alpha > 0.4 ? "auto" : "none";
+    const nowMs = performance.now();
+    const fullMs = this.reduced ? 0 : CHROME_FADE_MS;
+    const target = this.engaged(nowMs) ? 1 : 0;
+    if (target !== this.fade.to) {
+      // The way out starts when the window closed, not when a frame noticed,
+      // so a late frame (or a tab coming back) finds it where it should be.
+      const atMs = target === 0 ? this.chromeVisibleUntil : nowMs;
+      this.fade = { from: chromeFadeAlpha(this.fade, atMs, fullMs), to: target, atMs };
+    }
+    this.alpha = chromeFadeAlpha(this.fade, nowMs, fullMs);
+    if (this.alpha !== this.writtenAlpha) {
+      this.writtenAlpha = this.alpha;
+      for (const p of [this.controls, this.tapePanel]) {
+        p.style.opacity = String(this.alpha);
+        p.style.pointerEvents = this.alpha > 0.4 ? "auto" : "none";
+      }
+      this.captionBand.style.opacity = String(this.alpha);
+    }
+    // Hidden chrome ends the caption for good: re-engaging must not bring
+    // back a sentence about a moment that has passed.
+    if (this.captionLive && target === 0 && this.alpha === 0) {
+      this.captionLive = false;
+      this.caption.classList.remove("caption-show");
     }
     return this.alpha;
+  }
+
+  /** The chrome's visibility window: engagement keeps it open for 4s. */
+  private engaged(nowMs: number): boolean {
+    return nowMs < this.chromeVisibleUntil;
   }
 
   reducedMotion(): boolean {
@@ -153,12 +213,20 @@ export class Ui {
     }
     this.modeDot.classList.toggle("degraded", meta.degraded);
 
+    // Captions are chrome: they speak only while the viewer is engaged. One
+    // that fires at rest is dropped, not held for later — the piece at rest
+    // is wordless but for the provenance line. The detectors keep running
+    // either way; the tape and the screen-reader narration do not wait on
+    // this.
     if (meta.caption !== null && meta.caption.id !== this.lastCaptionId) {
       this.lastCaptionId = meta.caption.id;
-      this.caption.textContent = meta.caption.text;
-      this.caption.classList.remove("caption-show");
-      void this.caption.offsetWidth; // restart the CSS animation
-      this.caption.classList.add("caption-show");
+      if (this.engaged(performance.now())) {
+        this.caption.textContent = meta.caption.text;
+        this.caption.classList.remove("caption-show");
+        void this.caption.offsetWidth; // restart the CSS animation
+        this.caption.classList.add("caption-show");
+        this.captionLive = true;
+      }
     }
 
     const clock = meta.clock;
@@ -351,9 +419,10 @@ export class Ui {
       "is the queue at the center line getting shorter, cells vanishing from the front of " +
       "the line where they were next to trade. A sweep is several prices emptying in a row, " +
       "one large order eating through them, and afterwards the market simply is somewhere " +
-      "else. Then watch the hole refill — that is liquidity healing. The frame holds the " +
-      "whole book at rest; zoom in and a queue becomes countable, one cell per order, and " +
-      "the far dim ones are wishes parked miles from the price, some resting for days.");
+      "else. Then watch the hole refill — that is liquidity healing. At rest the frame " +
+      "holds still on the book around the price; zoom in and a queue becomes countable, " +
+      "one cell per order; zoom out and the far dim ones are wishes parked miles from the " +
+      "price, some resting for days.");
     section("Finding your way",
       "Drag up or down to wander the price axis; scroll or pinch to zoom all " +
       "the way from single orders out to the market's whole shape — once you " +
