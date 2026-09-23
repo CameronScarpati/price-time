@@ -24,19 +24,26 @@ export const BTCUSD: Instrument = { pair: "btcusd", priceDecimals: 2, amountDeci
 export function normalizeOrderMessage(msg: RawOrderMessage, instrument: Instrument): Command {
   const d = msg.data;
   const side: Side = d.order_type === 0 ? Side.Bid : Side.Ask;
-  const tick = parseDecimal(d.price_str, instrument.priceDecimals);
-  const sats = parseDecimal(d.amount_str, instrument.amountDecimals);
   const tradedSats = parseDecimal(d.amount_traded, instrument.amountDecimals);
   const micro = Number(d.microtimestamp);
 
+  // A deletion names the order by id alone, so its price is never parsed:
+  // the venue deletes orders that never rested, at prices off the cent grid
+  // (a recorded "63941.91523761"), and the strict parse would throw on them.
   switch (msg.event) {
     case "order_created":
       return {
-        kind: "rest", id: d.id, side, tick, sats, micro,
+        kind: "rest", id: d.id, side, micro,
+        tick: parseDecimal(d.price_str, instrument.priceDecimals),
+        sats: parseDecimal(d.amount_str, instrument.amountDecimals),
         ...(d.is_liquidation ? { liquidation: true } : {}),
       };
     case "order_changed":
-      return { kind: "reduce", id: d.id, side, tick, sats, tradedSats, micro };
+      return {
+        kind: "reduce", id: d.id, side, tradedSats, micro,
+        tick: parseDecimal(d.price_str, instrument.priceDecimals),
+        sats: parseDecimal(d.amount_str, instrument.amountDecimals),
+      };
     case "order_deleted":
       return { kind: "remove", id: d.id, tradedSats, micro };
   }

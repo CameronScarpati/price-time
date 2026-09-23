@@ -80,6 +80,22 @@ describe("order message normalization (the verified attribution rule)", () => {
     expect(normalizeOrderMessage(fill, BTCUSD)).toMatchObject({ kind: "remove", tradedSats: 5_000_000 });
   });
 
+  it("order_deleted ignores a price off the cent grid", () => {
+    // Recorded in public/replay/session.jsonl.gz: an order deleted without
+    // ever resting, priced to eight decimals. Parsing it stopped the replay.
+    const msg: RawOrderMessage = {
+      event: "order_deleted", channel: "live_orders_btcusd",
+      data: {
+        ...orderData, order_subtype: 1, amount: 0, amount_str: "0",
+        amount_at_create: "3.63812937", price: 63941.91523761, price_str: "63941.91523761",
+      },
+      event_id: "a", pre_event_id: "b", order_source: "orderbook",
+    };
+    expect(normalizeOrderMessage(msg, BTCUSD)).toEqual({
+      kind: "remove", id: orderData.id, tradedSats: 0, micro: 1786205968306000,
+    });
+  });
+
   it("order_changed carries the new remaining and the per-event traded quantity", () => {
     const msg: RawOrderMessage = {
       event: "order_changed", channel: "live_orders_btcusd",
