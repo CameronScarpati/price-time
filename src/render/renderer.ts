@@ -282,14 +282,15 @@ export class Renderer {
     );
     // The one thing NOT in that list is the clock, which advances every
     // frame: age drives brightness, so a skipped frame is a frame whose
-    // colours are a few milliseconds stale. Two guards keep that invisible.
-    // The arrival ramp is the fastest age effect at 120ms, and it only runs
-    // on orders that just arrived — which is a book change — so a book that
-    // has been still for longer than the ramp has none in flight. Past that,
-    // the quickest thing left is the 8s settle, and a tenth of a second of it
-    // is under half a percent of luminance.
+    // colours are a little stale. Two guards keep that invisible. The
+    // arrival ramp is the fastest age effect at 120ms, and it only runs on
+    // orders that just arrived — which is a book change — so a book that has
+    // been still for longer than the ramp has none in flight. Past that, the
+    // only age effect left is the ember, which travels base → ember over
+    // 540s: at most 0.6 of a channel, so ~0.3 of an 8-bit step per second.
+    // A second of staleness is below what the display can show.
     const rampQuiet = nowMs - this.bookChangedAtMs > 130;
-    const ageFresh = nowMs - this.lastDrawMs < 100;
+    const ageFresh = nowMs - this.lastDrawMs < 1000;
     if (same && rampQuiet && ageFresh) return;
     this.lastDrawMs = nowMs;
 

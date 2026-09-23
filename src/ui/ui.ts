@@ -411,7 +411,8 @@ export class Ui {
       "At every price, orders wait in line — first to arrive, first to trade. That line is " +
       "usually invisible: most market data adds the queue up into a single number. Here each " +
       "order keeps its place: cells near the center line are next to trade, cells at the tail " +
-      "may wait hours. Brightness is age — new orders arrive bright and dim as they wait. " +
+      "may wait hours. Brightness is age: a new order holds its full color for about a " +
+      "minute, then slowly dims as it waits. " +
       "Tap any cell to see its position, how much is ahead of it, and how long it has waited.");
     section("What to watch for",
       "Most quotes are withdrawn, not filled — the constant flicker is quoting machines " +

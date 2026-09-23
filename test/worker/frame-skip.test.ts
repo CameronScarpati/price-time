@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Pipeline } from "../../src/worker/pipeline";
+import { Pipeline, packedRestedAtSec } from "../../src/worker/pipeline";
 import { FRAME_BYTES, Header } from "../../src/worker/protocol";
 
 /**
@@ -82,5 +82,30 @@ describe("unchanged-book frame skip", () => {
       expect(age).toBeGreaterThanOrEqual(0);
       expect(age).toBeLessThan(3600);
     }
+  });
+});
+
+describe("seeded orders and the arrival ramp", () => {
+  const epoch = 1_000_000;
+  const seedAt = epoch + 5_000;
+  /** The cell shader's arrival factor (cells.ts) for a packed stamp. */
+  const ramp = (packedSec: number, nowSec: number): number =>
+    Math.min(Math.max(Math.max(nowSec - packedSec, 0) / 0.12, 0.3), 1);
+
+  it("a seeded order is drawn at full alpha on the seed's own frame", () => {
+    // A snapshot stamps every order with the one snapshot time: the seed.
+    const packed = packedRestedAtSec(seedAt, epoch, seedAt);
+    expect(ramp(packed, (seedAt - epoch) / 1000)).toBe(1);
+  });
+
+  it("an order that rests after the seed still fades in, from its true time", () => {
+    const at = seedAt + 40;
+    const packed = packedRestedAtSec(at, epoch, seedAt);
+    expect(packed).toBe((at - epoch) / 1000);
+    expect(ramp(packed, (at - epoch) / 1000)).toBe(0.3);
+  });
+
+  it("the ancient-order floor still holds for seeded stamps", () => {
+    expect(packedRestedAtSec(epoch - 5e9, epoch, seedAt)).toBe(-1_000_000);
   });
 });

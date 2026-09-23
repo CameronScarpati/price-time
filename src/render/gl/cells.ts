@@ -53,11 +53,9 @@ out float vYPx;
 const vec3 BID = vec3(0.263, 0.686, 0.961);  // blue — never red/green
 const vec3 ASK = vec3(1.0, 0.667, 0.278);    // amber
 const vec3 LIQ = vec3(0.71, 0.49, 1.0);      // liquidation violet
-// Age anchors: arrivals lighten toward the hot tint, embers sink along a hue
-// path (amber → burnt sienna, blue → deep sea) instead of a grey lerp.
-// Luminance still monotonically encodes age; only the journey is richer.
-const vec3 BID_HOT = vec3(0.78, 0.92, 1.0);
-const vec3 ASK_HOT = vec3(1.0, 0.90, 0.70);
+// Age anchors: embers sink along a hue path (amber → burnt sienna, blue →
+// deep sea) instead of a grey lerp. Luminance still monotonically encodes
+// age; only the journey is richer.
 const vec3 BID_EMBER = vec3(0.10, 0.24, 0.42);
 const vec3 ASK_EMBER = vec3(0.45, 0.25, 0.10);
 
@@ -119,16 +117,18 @@ void main() {
   // Both come from the worker; the shader only subtracts.
   float aAge = max(uNowSec - aRestedAtSec, 0.0);
   vec3 base = aFlags > 0.5 ? LIQ : mix(BID, ASK, aSide);
-  // Waiting made visible: arrive bright, settle by ~8s, dim to ember by
-  // ~10min. Envelopes unchanged; they now travel the per-side hue anchors
-  // (liquidation keeps neutral anchors so violet stays violet).
-  vec3 hot = aFlags > 0.5 ? vec3(1.0) : mix(BID_HOT, ASK_HOT, aSide);
+  // Waiting made visible: an order holds its side's colour for its first
+  // minute, then dims to ember by ~10min along the per-side hue anchor
+  // (liquidation keeps a neutral anchor so violet stays violet). There is no
+  // arrival brightening: a light going off at every arrival — and across the
+  // whole field at once on a reseed — was an event flash, and it is gone.
   vec3 emberC = aFlags > 0.5 ? LIQ * 0.4 : mix(BID_EMBER, ASK_EMBER, aSide);
-  float settle = clamp(aAge / 8.0, 0.0, 1.0);
   float ember = clamp((aAge - 60.0) / 540.0, 0.0, 1.0);
-  float flare = (uReduced > 0.5 ? 0.1 : 0.28) * (1.0 - settle);
-  vec3 color = mix(mix(base, emberC, ember), hot, flare);
+  vec3 color = mix(base, emberC, ember);
   float alpha = 0.92;
+  // Arrival: a new order fades up over 120ms. Seeded orders are packed past
+  // this ramp (pipeline.ts, packedRestedAtSec), so a reseed does not fade
+  // the whole field in.
   if (uReduced < 0.5) alpha *= clamp(aAge / 0.12, 0.3, 1.0);
   vColor = vec4(color * (1.0 - uDim * 0.55), alpha);
 }`;

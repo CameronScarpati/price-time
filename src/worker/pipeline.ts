@@ -15,6 +15,9 @@ const TAPE_LENGTH = 24;
 const CATCH_UP_SPEED = 8;
 /** How long live may stay non-flowing before the synthetic understudy steps in. */
 const LIVE_GRACE_MS = 2_500;
+/** The cell shader's arrival ramp: alpha rises over an order's first 120ms
+ * of age (cells.ts). */
+const ARRIVAL_RAMP_MS = 120;
 
 /**
  * The worker's core: one engine, one active source, one truth (docs/design.md
@@ -50,6 +53,9 @@ export class Pipeline {
    * 128k there, where seconds-since-session-start keeps microsecond
    * resolution for a day. Re-based before precision could ever bite. */
   private ageEpochMs = Date.now();
+  /** When the current book was last seeded. Orders stamped at or before it
+   * came with the seed rather than arriving. */
+  private seedAtMs = -Infinity;
   /** Which book state the packed frame describes. Bumped by every engine
    * event, so an unchanged book packs to identical bytes and can be skipped.
    * Starts at 1: a fresh, zeroed buffer reads 0 and must always look stale. */
@@ -231,6 +237,7 @@ export class Pipeline {
         this.detectors.bookReplaced();
         this.restedAtMs.clear();
         const nowMs = Date.now();
+        this.seedAtMs = nowMs;
         for (const o of event.cmd.orders) {
           this.restedAtMs.set(o.id, Math.min(o.micro / 1000, nowMs));
         }
@@ -433,11 +440,7 @@ export class Pipeline {
       const packed = packFrame(this.engine, buffer, (slot) => {
         const at = this.restedAtMs.get(this.engine.store.id[slot]);
         if (at === undefined) return nowSec;
-        // Floored well before Float32 gets coarse. Anything this old is fully
-        // embered in the shader, so the clamp changes no pixel — and it must
-        // be a CONSTANT floor, not one relative to now, or an ancient order
-        // would re-write itself on every frame and defeat the whole point.
-        return Math.max((at - this.ageEpochMs) / 1000, -1_000_000);
+        return packedRestedAtSec(at, this.ageEpochMs, this.seedAtMs);
       });
       this.lastCoreMedianSats = packed.coreMedianSats;
       f32[Header.BookRevision] = this.bookRevision;
@@ -634,6 +637,25 @@ export class Pipeline {
     }
     return orders;
   }
+}
+
+/**
+ * An order's rest time as the cell shader reads it, in seconds from the age
+ * epoch. A seeded order did not arrive at the seed: the book was already
+ * there, and a snapshot stamps every order with the one snapshot time. So it
+ * is packed one arrival ramp earlier, which keeps a reseed from fading the
+ * whole field in from 30% as if every order had just landed. This is the
+ * shader's copy only; the inspector reads the unshifted time, and 120ms
+ * changes nothing else the shader does with age (the ember starts at 60s).
+ *
+ * Floored well before Float32 gets coarse. Anything this old is fully
+ * embered in the shader, so the clamp changes no pixel — and it must be a
+ * CONSTANT floor, not one relative to now, or an ancient order would
+ * re-write itself on every frame and defeat the whole point.
+ */
+export function packedRestedAtSec(atMs: number, epochMs: number, seedAtMs: number): number {
+  const shown = atMs <= seedAtMs ? atMs - ARRIVAL_RAMP_MS : atMs;
+  return Math.max((shown - epochMs) / 1000, -1_000_000);
 }
 
 /**
