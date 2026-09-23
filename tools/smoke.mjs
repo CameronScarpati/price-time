@@ -25,7 +25,10 @@ const drawn = await page.evaluate(
     new Promise((resolve) => {
       // Read inside the same rAF turn as the app's draw: the drawing buffer
       // is not preserved across presents, so reading later sees only clear.
-      requestAnimationFrame(() => {
+      // A turn with nothing new to show skips the draw and reads clear too,
+      // so sample turns until one drew.
+      let turns = 0;
+      const sample = () => {
         const canvas = document.querySelector("canvas");
         const gl = canvas.getContext("webgl2");
         const px = new Uint8Array(4 * canvas.width);
@@ -38,8 +41,10 @@ const drawn = await page.evaluate(
             if (px[i] > 24 || px[i + 1] > 24 || px[i + 2] > 24) return resolve(true);
           }
         }
-        resolve(false);
-      });
+        if (++turns >= 120) return resolve(false);
+        requestAnimationFrame(sample);
+      };
+      requestAnimationFrame(sample);
     }),
 );
 await browser.close();
