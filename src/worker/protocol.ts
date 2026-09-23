@@ -4,7 +4,7 @@ import type { SourceKind } from "../sources/source";
 /**
  * The worker/main boundary is also the truth boundary (docs/design.md §9):
  * everything in these messages describes the market; everything the renderer
- * adds on top (easing, decay, stagger) describes looking at it.
+ * adds on top (framing, easing, age-to-brightness) describes looking at it.
  *
  * State crosses as one transferred ArrayBuffer per animation frame, ping-
  * ponged so steady state allocates nothing. Layout, all Float32:
@@ -43,8 +43,10 @@ export const Header = {
   BidDepthNearSats: 5,
   AskDepthNearSats: 6,
   /** Camera hint: half-span (ticks from mid) for the bird's-eye standpoint —
-   * the book's own extent, bounded by a fraction of the price so the far
-   * constellation cannot squash the market into a line. See packer.ts. */
+   * the body of the book (the nearest three quarters of occupied levels, plus
+   * air), bounded by a fraction of the price so the far constellation cannot
+   * squash the market into a line. On a live book the bound is what sets it.
+   * See packer.ts. */
   SpanHintTicks: 7,
   /** 80th-percentile LEVEL depth among the top levels — the spine layout's
    * width scale, so a typical row spans most of a phone screen instead of
@@ -52,8 +54,7 @@ export const Header = {
   CoreLevelP80Sats: 8,
   /** Extent of the resting book: lowest and highest occupied tick across
    * both sides (0/0 while empty). The camera's pan clamp — the viewer may
-   * wander a little past the last order, never into the void beyond — and
-   * the raw material of the bird's-eye span above. */
+   * wander a little past the last order, never into the void beyond. */
   LoTick: 9,
   HiTick: 10,
   /** Which book state this buffer holds. The worker stamps it; on the next
@@ -63,13 +64,6 @@ export const Header = {
    * well inside f32's exact-integer range. */
   BookRevision: 11,
 } as const;
-
-/** A discrete market event the renderer may animate (decay/stagger are the
- * renderer's; the event itself is data). Trades are never dropped; cancels
- * are capped per frame and the overflow count is reported. */
-export type RenderEvent =
-  | { kind: "trade"; tick: PriceTick; sats: Sats; aggressor: Side; liquidation: boolean }
-  | { kind: "cancel"; tick: PriceTick; side: Side; sats: Sats; aheadSats: Sats };
 
 export interface TapeRow {
   tick: PriceTick;
@@ -99,8 +93,9 @@ export interface FrameMeta {
    * with the frame it arrived on: the epoch can be re-based, and when it is,
    * every instance is re-packed in that same frame. */
   nowSec: number;
-  events: RenderEvent[];
-  droppedCancels: number;
+  /** The last trades, newest last: the only discrete events that cross.
+   * Nothing on the main thread marks a trade or a cancel (the book changing
+   * is the mark), so there is no per-frame event list to carry. */
   tape: TapeRow[];
   caption: { text: string; id: number } | null;
   narration: string;

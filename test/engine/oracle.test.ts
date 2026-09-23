@@ -77,8 +77,9 @@ describe("checkInvariants canaries", () => {
 describe("aheadSats", () => {
   // Differential: every cancel's aheadSats must equal a brute walk of the
   // level queue up to the dying order, summed BEFORE the cancel applies.
-  // This number feeds the inspector and the cancel-ghost geometry; nothing
-  // else asserts it.
+  // Nothing downstream reads it any more (the inspector walks the queue
+  // itself, and the cancel ghost is gone); while the engine still computes
+  // it, this keeps it honest.
   it("equals the brute-force queue walk on 400 seeded random cancels", () => {
     const prng = new Prng(2026);
     const engine = new Engine("internal");

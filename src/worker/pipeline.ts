@@ -9,9 +9,8 @@ import { ReplaySource } from "../sources/replay/player";
 import { QUIET_BTCUSD, SyntheticMarket, type SyntheticCalibration } from "../sources/synthetic/market";
 import type { FlowSource, SourceEvent, SourceKind } from "../sources/source";
 import { packFrame } from "./packer";
-import { Header, type ClockInfo, type FrameMeta, type InspectionResult, type RenderEvent, type TapeRow } from "./protocol";
+import { Header, type ClockInfo, type FrameMeta, type InspectionResult, type TapeRow } from "./protocol";
 
-const MAX_CANCEL_EVENTS_PER_FRAME = 60;
 const TAPE_LENGTH = 24;
 const CATCH_UP_SPEED = 8;
 /** How long live may stay non-flowing before the synthetic understudy steps in. */
@@ -20,7 +19,7 @@ const LIVE_GRACE_MS = 2_500;
 /**
  * The worker's core: one engine, one active source, one truth (docs/design.md
  * §2 and §10). The pipeline folds source events into the engine, collects
- * render events and detector output, manages the degradation ladder
+ * the tape and detector output, manages the degradation ladder
  * (live → synthetic seeded from the last good book), and owns the playback
  * clock that makes pause honest (live events buffer, then catch up, labeled).
  */
@@ -37,8 +36,6 @@ export class Pipeline {
 
   private readonly detectors = new Detectors();
 
-  private renderEvents: RenderEvent[] = [];
-  private droppedCancels = 0;
   private tape: TapeRow[] = [];
   private transition: { from: SourceKind; to: SourceKind } | null = null;
   private degraded = true;
@@ -254,10 +251,6 @@ export class Pipeline {
           if (this.sizeSamples.length > 256) this.sizeSamples.shift();
           break;
         case "trade": {
-          this.renderEvents.push({
-            kind: "trade", tick: event.tick, sats: event.sats,
-            aggressor: event.aggressor, liquidation: event.liquidation,
-          });
           this.tape.push({ tick: event.tick, sats: event.sats, aggressor: event.aggressor, atMs: nowMs });
           if (this.tape.length > TAPE_LENGTH) this.tape.shift();
           this.tradeTimes.push(nowMs);
@@ -265,16 +258,6 @@ export class Pipeline {
           break;
         }
         case "canceled": {
-          let kept = 0;
-          for (const e of this.renderEvents) if (e.kind === "cancel") kept++;
-          if (kept < MAX_CANCEL_EVENTS_PER_FRAME) {
-            this.renderEvents.push({
-              kind: "cancel", tick: event.tick, side: event.side,
-              sats: event.sats, aheadSats: event.aheadSats,
-            });
-          } else {
-            this.droppedCancels++;
-          }
           this.cancelTimes.push(nowMs);
           this.restedAtMs.delete(event.id);
           break;
@@ -471,8 +454,6 @@ export class Pipeline {
       degraded: this.degraded,
       clock: this.clock(nowMs),
       nowSec,
-      events: this.renderEvents,
-      droppedCancels: this.droppedCancels,
       tape: [...this.tape],
       caption: this.detectors.currentCaption(),
       narration: this.detectors.narrate(glance, BTCUSD.priceDecimals),
@@ -486,8 +467,6 @@ export class Pipeline {
       transition: this.transition,
       packsPerSec: this.packRate(nowMs),
     };
-    this.renderEvents = [];
-    this.droppedCancels = 0;
     this.transition = null;
     return meta;
   }
