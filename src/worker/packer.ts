@@ -101,9 +101,9 @@ export function packFrame(
   // still wobbles enough to keep re-committing the zoom (measured: 68
   // distinct scale values in 40s), while the 75th sits at a flat 35-36 and
   // barely moves at all (5 values in 40s), which lets the profile ceiling do
-  // the framing and hold it exactly. Rows land at ~7px. The quarter left
-  // outside is the far tail, still reachable by pan (travel is clamped to
-  // the TRUE extent) or by the viewer's own zoom-out.
+  // the framing and hold it exactly. On the understudy, rows land at ~7px.
+  // The quarter left outside is the far tail, still reachable by pan (travel
+  // is clamped to the TRUE extent) or by the viewer's own zoom-out.
   //
   // The price bound on top is not optional: a real book's far constellation
   // is not a neighborhood at all. BTC/USD rests asks past $21M and bids at a
@@ -112,6 +112,13 @@ export function packFrame(
   // PRICE, not of the spread: price is the instrument's own scale and barely
   // moves, where the spread breathes every second and would drag the
   // standpoint with it. At BTC's price it is a few dollars either side.
+  //
+  // On a live book the bound, not the percentile, sets the span: it bound
+  // in every sample of the recorded fixture and the bundled replay
+  // (measured 2026-09-23), about 320 ticks either side, which puts the
+  // camera near 1.1 px/tick and rows near 1 CSS px. The ~7px rows above are
+  // the understudy's. How heavy a live row should be is an open design
+  // question (price grouping), not a constant to retune here.
   //
   // Cost: the walk stops at the percentile OR at the bound, whichever comes
   // first, so a deep live book costs the handful of levels inside a few

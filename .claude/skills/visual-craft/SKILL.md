@@ -32,21 +32,44 @@ flash of any kind. Not softened, not gated, not brief. Gone.
 
 ## What is actually animated now (the whole list)
 
-1. **The arrival ramp.** ~120ms alpha-in via the age channel in the cell
-   shader, so a new cell does not pop into a field of settled ones.
+1. **The arrival ramp.** ~120ms alpha-in (from 0.3) via the age channel in
+   the cell shader, so a new cell does not pop into a field of settled ones.
+   It is alpha only: an arrival is never brighter than its neighbors. A
+   seeded order did not arrive, so it is packed past the ramp
+   (`packedRestedAtSec` in `pipeline.ts`) and a reseed does not fade the
+   whole field in.
 2. **The camera's designed move.** 650ms smootherstep, centre and zoom
-   together, fired only when the mid walks past a tenth of the viewport or
-   the committed zoom changes. It lands and ends.
-3. **The length scale's designed move.** The same 650ms, behind a very wide
-   (0.5) deadband.
-4. **The viewer's own glides.** Released pan, arrow-key travel, PageUp/Down
+   together, fired only when the mid has stayed past a tenth of the viewport
+   for half a second, or the committed zoom changes. Its endpoint is fixed
+   when it starts: it lands there and ends, and the deadband then decides
+   afresh. A move that chased the live target reversed and, near its end,
+   jumped the whole field 40 and 181 device px in single frames on a phone
+   (measured 2026-09-23, headless); the half-second hold keeps a sweep that
+   refills a few packs later from being framed at all. While the hand owns the
+   scale, only the centre makes the move, and a wheel or pinch does not
+   restart it. A crossed pack (negative spread) is never a target.
+3. **The viewer's own motion.** Released pan, arrow-key travel, PageUp/Down
    leap: finite ease-out cubic, 160–480ms by distance, landing on the tick
-   grid.
-5. **The mode cross-fade.** 600ms sine luminance dip; the label changes
+   grid. Zoom under the hand: an ease with a 180ms time constant that snaps
+   exactly onto its target within 0.1%, so it arrives.
+4. **The mode cross-fade.** 600ms sine luminance dip; the label changes
    first.
-6. **Chrome fade.** ~200ms in on engagement, out after 4s idle.
+5. **Chrome fades, all opacity only.** The chrome itself: a straight 200ms
+   line that lands exactly (`chromeFadeAlpha` in `ui.ts`), in on engagement,
+   out after 4s idle. Inside it, a caption's own fade (in over ~0.36s, out
+   over the last ~1.2s of 6s, no rise), shown only while the chrome is up.
+   The follow chip (150ms) and the inspector (120ms).
 
-That is the list. If a change adds a seventh, it needs the owner's word.
+That is the list. If a change adds a sixth, it needs the owner's word.
+
+Deliberately NOT on it: the length scale (committed once per book as a cut,
+then held exactly; `LengthScale` in `renderer.ts`), the mode dot (degraded
+is a held, dimmed dot, not a pulse), any flare or flash on an arrival, a
+trade or a cancel, and any caption at rest.
+
+Owner decisions of 2026-09-23: the arrival flare is deleted (an order no longer arrives bright),
+captions appear only while the viewer is engaged, and the length scale is
+held once committed. None of the three comes back without the owner's word.
 
 ## Asymptotic easing is a bug here, not a taste
 
@@ -77,6 +100,10 @@ whole number of them. Two rules fall out, both measured:
   the deadband and glide math need it — but what reaches the shader stands on
   the grid, so a pan slides the field in whole pixels and every row keeps its
   phase. `layout.ts` reads the same snapped value, so hit-testing agrees.
+  It reaches the shader as a whole tick plus a pixel remainder
+  (`splitCenterForGpu`): a float32 uniform at BTC's price resolves only half
+  a tick, which quantized every pan and designed move into 4px jumps at 8
+  px/tick and undid the snap.
 
 Both are presentation at the smallest scale that exists here: neither can
 move anything by as much as one device pixel.
@@ -91,19 +118,45 @@ move anything by as much as one device pixel.
   layouts; `maxPpt` 8 is a ceiling on how CLOSE it may stand, so a thin book
   is a wide frame with space in it, never a close-up of three bricks — and on
   a small book that ceiling BINDS, which is the stillest state there is.
+- That describes the synthetic understudy. On the live feed neither the body
+  nor the ceiling sets the frame: a live book holds ~6,500 occupied levels
+  and only 6 to 126 of them sit inside the price bound, so the 75% walk
+  always stops at the bound (`packer.ts`) and the frame is 5e-5 of mid,
+  about ±320 ticks ($3.20 either side). That is ~1.1 px/tick and rows ~1 CSS
+  px (0.67 on a 3x phone whose view is 750px tall), with a median of 12-16
+  occupied levels on screen (measured 2026-09-23 by packing the 120s fixture
+  and the bundled replay).
 - Row weight is bought with the span, not with a fudge: rows are `ppt - 1`
-  px, so every tick of span you frame is height taken off every row. 7px is
-  the number that survived review; 3px was "too thin for sure".
+  px, so every tick of span you frame is height taken off every row. On the
+  synthetic understudy the 8 px/tick ceiling gives ~7px rows, the answer to
+  the owner's "too thin for sure" at 3px (measured in synthetic only; no
+  owner review of 7px rows is recorded). Live rows are ~1 CSS px, and how
+  heavy a live row should be is an open design question (price grouping).
+  Nothing is decided; do not retune it without the owner.
 - Reframe deadband: a tenth of the viewport height. Measured at 45s of the
   synthetic understudy, that is about one designed move per axis per 45s and
   ~96% of frames writing nothing at all. If a change makes that number worse,
   it is a regression whatever it looks like in a still.
-- Auto-zoom deadband 12%; length-scale deadband 0.5 (lengths only have to be
-  right relative to each other, and the median top-level size is noisy on a
-  thin book).
-- Age → luminance: flare `mix(base, white, 0.28·(1−age/8s))`, then ember decay
-  ×0.4 over ~10min. Mix toward white, never multiply >1 — multiplying clips
-  channels and washes amber into yellow-green (we hit this).
+- Auto-zoom deadband 12%. A hand-set zoom holds; the both-bests cap may only
+  tighten it, only for a wider spread that has held half a second, and never
+  hands it back (a cap that followed the spread both ways pumped the field,
+  measured 34% peak-to-peak; one that tightened for any pack kept a held
+  4.64 px/tick at 2.06 for good after a single sweep on the recorded fixture).
+- Length scale: no deadband and no move. It is committed once per book, on
+  the first frame a two-sided book holds 24 orders, as a cut, and then held
+  exactly. A new book (mode switch, reseed, reconnect, hidden tab) or a new
+  layout or width takes it again. Lengths only have to be right relative to
+  each other, and a scale that followed the noisy median behind a 0.5
+  deadband still re-lengthened every cell two or three times a minute at
+  rest (measured: x0.41 to x1.55).
+- Age → luminance: an order holds its side's color for its first 60s, then
+  travels to its ember anchor over the next 540s,
+  `mix(base, ember, clamp((age−60)/540))`, along a hue path rather than a
+  grey lerp. There is no arrival flare: the 28% mix toward a hot tint over
+  an order's first 8s was an event flash (and a whole-field one on every
+  reseed), and it is deleted. The cells' luminous core keeps the old rule:
+  mix toward white, never multiply >1 — multiplying clips channels and
+  washes amber into yellow-green (we hit this).
 - The rAF loop renders at ≤60fps even on ProMotion: a mostly-still field gains
   nothing from 120Hz that is worth double the fill rate.
 - Synthetic pacing is deliberately SLOWER than live's raw message rate
@@ -127,16 +180,24 @@ the cells' edges alone.
 Bids `#43AFF5` (blue), asks `#FFAA47` (amber), liquidation violet, background
 `#0A0E12` (deep ink, never pure black). Side is always position + hue, never
 hue alone (CVD). Age is luminance only. Do not add a third hue without a
-domain meaning and an explainer entry. There is no white in the palette any
-more — white was the flash.
+domain meaning and an explainer entry. White is never laid on the field as
+an event: white was the flash, and the arrival flare (which peaked at pure
+white on liquidations) went the same way. The only white left in the shader
+is the cells' constant luminous core, a 16% mix that is the same in every
+frame.
 
 ## Composition rules
 
 - The spread gap is the piece's center of gravity: at rest it sits mid-screen,
   breathing. Anything that competes with it must earn the attention.
-- The frame ALWAYS contains both best bid and best ask — the camera's touch
-  cap guarantees it. Row legibility yields on gappy books (a phone once
+- The frame contains both best bid and best ask once a widening has held
+  half a second — the camera's touch cap guarantees it, and a one-pack spike
+  is not framed. Row legibility yields on gappy books (a phone once
   showed only the bid side because the zoom floor won; it must never again).
+  The one exception is a crossed pack, which the camera ignores: live flow
+  crosses for a message at a time, and on live a crossing that persists is a
+  wrong book the pipeline reseeds (~8s). A replayed capture has no such
+  guard, so a crossed stretch of a recording holds the last frame.
 - The standpoint does not re-choose itself. One profile, always. The
   dense/skeletal bimodal framing that used to switch on occupancy is deleted:
   a camera that changes its mind about how close to stand is a camera that
@@ -161,17 +222,22 @@ more — white was the flash.
 - Desktop = seam (two-sided, fronts meeting at the price axis); phone = spine
   (full-width rows, front at left). Same cells, two layouts — change both or
   neither, and keep `layout.ts` (CPU) in lockstep with `cells.ts` (shader).
-- Wordless at rest: no numbers, no axes until engagement. The provenance line
-  is the only standing text.
+- Wordless at rest: no numbers, no axes, no captions until engagement. The
+  provenance line is the only standing text. A caption that fires at rest
+  is dropped, not saved for later, and hiding the chrome ends a caption for
+  good; the detectors and the screen-reader narration run regardless.
 
 ## Reduced motion is a second piece, not an absence
 
 The gap has narrowed to almost nothing now that the piece itself is still:
-the same designed moves happen, cut instead of eased, and the arrival ramp is
-a whisper (0.1) rather than a fade. It should feel like a stiller sibling,
-not a broken one — and "stiller than this" is now a fine hair. Test it every
-time motion changes: `page.emulateMedia({ reducedMotion: "reduce" })` or the
-OS toggle.
+the same designed moves happen, cut instead of eased (the camera's move,
+PageUp/Down and a released drag each land in one frame), an arrival appears
+at full strength with no ramp, the chrome appears and leaves without a fade,
+and a caption holds and fades out over its last 0.7s. The mode dip stays: it
+is a change of light, not of position. It should feel like a stiller
+sibling, not a broken one — and "stiller than this" is now a fine hair. Test
+it every time motion changes: `page.emulateMedia({ reducedMotion: "reduce" })`
+or the OS toggle.
 
 ## Judging a change
 

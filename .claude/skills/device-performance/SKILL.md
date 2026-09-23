@@ -42,7 +42,9 @@ heap; zero steady-state per-frame allocation.
 6. **Bundle**: `pnpm build` prints gzip sizes; budget is the sum of JS.
 7. **Work not done**: `?hud=1` reports `packs/s` against the ~60 frames a
    second the renderer requests. An unchanged book costs nothing — no pack, no
-   upload, and when presentation is also still, no draw. If that number sits
+   upload, and when presentation is also still, at most one draw a second
+   (the ember's age still advances, by about a third of an 8-bit step a
+   second). If that number sits
    at 60 on a quiet market, something is deriving a per-frame value into the
    packed frame and the skip has stopped working.
 
@@ -51,9 +53,9 @@ heap; zero steady-state per-frame allocation.
 For burst behavior, force synthetic mode with a hot calibration:
 `?mode=synthetic&seed=1` and temporarily raise `takersPerSec`/excitation in
 `QUIET_BTCUSD` (do not commit the hot values). Every trade must still reach
-the frame's event list (they are never dropped, even though nothing is drawn
-from them), the book must coalesce to one repaint per frame, and the HUD must
-hold budget through the burst.
+the worker's detectors, tape and trade stats (they are never dropped, even
+though nothing is drawn from them), the book must coalesce to one repaint
+per frame, and the HUD must hold budget through the burst.
 
 ## Recording results
 

@@ -64,12 +64,15 @@ project's spine — market state crosses it only as a packed, transferred
 - **Disclosure.** The provenance mark always states the mode, and the label
   changes at or before the data does — never after.
 - **Stillness.** The frame holds: between designed moves the camera writes
-  nothing. Every automatic move is finite and lands. Nothing eases
+  nothing. Every automatic move is finite and lands on the endpoint it
+  planned, and fires only for a drift that has held half a second. Nothing eases
   asymptotically anywhere on the render path — cell edges snap to the device
   grid, so a scale or centre that never arrives makes the whole field boil.
+  The length scale is taken once per book, as a cut, and then held.
 - **Backpressure.** Book state coalesces to one repaint per frame; discrete
-  trade events are never dropped (cancels may be capped in the frame's event
-  list; the count is reported).
+  trade events are never dropped: every one reaches the worker's detectors,
+  tape and trade stats. No event list crosses to the main thread, because
+  nothing there draws a trade or a cancel.
 - **The frame is a fact, not a derivative.** Nothing packed may be computed
   from "now" — instances carry `restedAtSec`, and age is `meta.nowSec` minus
   it in the shader — so an unchanged book packs to identical bytes. The

@@ -37,10 +37,11 @@ order-by-order event stream (every individual create, change, and delete, with
 ids). Those events are rebuilt into a full book by a deterministic price-time
 matching engine, the same kind of single-sequencer state machine a real venue
 runs, and the rendering draws each order as its own cell, in its true queue
-position, with its age as brightness. New orders arrive bright and settle;
-old ones dim to embers. Zoom out and the cell separators fall below a pixel,
-queues optically melt into solid depth: you watch order-by-order data
-aggregate into the "market depth" picture everyone else starts from.
+position, with its age as brightness. A new order holds its full color for
+about a minute; old ones dim to embers. Zoom out and the cell separators fall
+below a pixel, queues optically melt into solid depth: you watch
+order-by-order data aggregate into the "market depth" picture everyone else
+starts from.
 
 Things worth waiting for: a **sweep** (one aggressive order eating through
 several price levels, queue after queue emptying up the book, and the price
@@ -48,10 +49,12 @@ simply *is* somewhere else afterward); the **refill**, as makers pour quotes
 back into the hole; **cancel storms**, when the flicker doubles because the
 quoting machines all change their minds at once; and on quiet nights, a
 market so thin that a single arriving order is an event. The piece notices
-these moments and narrates them in one quiet line.
+these moments and, whenever its controls are showing, narrates them in one
+quiet line.
 
-![Simulated mode: the synthetic market seeded from real state, with the tape
-and price rules visible](docs/images/simulated-engaged.png)
+![Simulated mode with a fixed seed: the synthetic market with its controls
+showing, the mid and spread in the gap, price rules and the tape
+visible](docs/images/simulated-engaged.png)
 *The engaged chrome: mid and spread in the gap, price rules, the tape of
 recent trades. This shot is from simulated mode (the label at the bottom
 always tells you), where synthetic agents drive the same engine.*

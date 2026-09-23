@@ -40,10 +40,13 @@ gzip budget.
   `node tools/dev-relay.mjs` + `?ws=ws://localhost:8975&rest=http://localhost:8975/api/v2`.
 
 Checklist while watching: spread breathing at center · arrivals joining queue
-backs · cancels vanishing quietly · trades visible as the queue at the touch
+backs at their side's color, never brighter than their neighbors ·
+cancels vanishing quietly · trades visible as the queue at the touch
 getting shorter (there is no flash — if you see one, something regressed) ·
-captions appearing on real moments only · provenance label correct for the
-mode · **the frame HOLDING** — pick one row and stare at it: it must not
+no caption at rest, and while engaged, captions on real moments only ·
+provenance label correct for the mode, its dot held (not pulsing) while
+degraded · cell lengths that do not change while the book is the same book
+· **the frame HOLDING** — pick one row and stare at it: it must not
 shift, creep, or shimmer between the camera's rare designed moves · nothing
 moving you can't name the event for.
 

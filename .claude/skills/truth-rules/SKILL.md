@@ -25,10 +25,11 @@ them. See `.claude/skills/visual-craft/` for how far that goes.
 
 The worker owns every number that describes the market; the renderer owns
 every number that describes looking. The renderer receives a read-only frame
-and an event list — there is deliberately no path by which render code can
-invent a price, size, or ordering. Keep it that way: if your feature needs
-market state the frame doesn't carry, extend the frame in the worker; never
-derive or guess it renderer-side.
+and its metadata (clocks, the tape of recent trades, the caption, stats;
+there is no per-frame event list any more) — there is deliberately no path
+by which render code can invent a price, size, or ordering. Keep it that
+way: if your feature needs market state the frame doesn't carry, extend the
+frame in the worker; never derive or guess it renderer-side.
 
 ## Worked examples — allowed
 
@@ -39,12 +40,24 @@ derive or guess it renderer-side.
   afterglow and the choreography are presentation. Allowed — and REMOVED
   anyway, because the owner does not want a light going off. "Truth permits
   it" was never the same as "it belongs in the piece".
+- Drawing an order brighter for its first 8s. Its age is real and the
+  brightness is presentation. Allowed, and deleted anyway (owner decision,
+  2026-09-23): a light going off at every
+  arrival, and across the whole field at once on a reseed, is an event
+  flash by another name. Age now reads only as the ember, from 60s on.
+- A caption saying what the market just did. The sentence is data (the
+  detectors compute it in the worker); when it shows is presentation.
+  Allowed, and since 2026-09-23 shown only while the viewer is engaged
+  (owner decision): the piece at rest is wordless.
 - The 600ms luminance dip on a mode transition — a designed announcement of a
   real mode change, with the label changing first.
 - Min-clamping cell length to 1.5px (dust must be visible) and clamping raster
   length at ~1.25 viewports (a whale still reads "longer than the screen").
   Both are disclosed presentation of real sizes.
-- Moving the length SCALE as the size distribution shifts — a scale is a lens.
+- Choosing the length SCALE from the size distribution — a scale is a lens.
+  It may move, but every move re-lengthens every cell in the field, so it is
+  taken once per book and then held (owner decision of 2026-09-23, as
+  relayed): a new book is the only reason to look again.
 
 ## Worked examples — forbidden (each was tempting at some point)
 
@@ -57,8 +70,10 @@ derive or guess it renderer-side.
   camera may widen (presentation), the caption may say "quiet market" (true),
   but nothing may move without an event.
 - Dropping trade events under load to keep frame rate. Coalesce book state,
-  never trade prints (protocol.ts caps cancels in the event list and REPORTS
-  the drop). Not drawing an event is fine; not KNOWING it is not.
+  never trade prints: every trade reaches the worker's detectors, the tape
+  and the trade-rate stats. Nothing on the main thread draws a trade or a
+  cancel, so no event list crosses the boundary and there is no drop count
+  to report. Not drawing an event is fine; not KNOWING it is not.
 - Letting the label lag a mode change by "one clean fade". The label leads,
   always — a viewer must never read simulated texture as live truth.
 

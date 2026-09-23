@@ -91,7 +91,8 @@ varies across modes is *who has authority to declare a match*, and nothing else:
 - **Live** — Bitstamp's order stream is the authority. Fill events arrive as
   `order_changed`/`order_deleted` with `amount_traded > 0`; the engine applies them
   through the same queue-consumption code path its own matcher uses. Trade prints
-  from `live_trades` attach aggressor side and drive the tape and trade animation.
+  from `live_trades` are a cross-check on that stream, not a second source: the
+  tape and the detectors read the engine's own trade events.
 - **Synthetic** — seeded agents generate arrivals; the engine matches internally,
   under strict invariants. Always available, deterministic from a seed.
 - **Replay** — a recorded capture of either of the above, authority preserved.
@@ -172,8 +173,10 @@ matters.
 
 **Events out.** `orderRested`, `orderReduced`, `orderCanceled`, `orderFilled`,
 `trade` (maker id, taker ref, price, qty, aggressor side), `bookSeeded`,
-`gapDetected`, `modeChanged`. The renderer consumes these for animation triggers;
-the frame packer consumes state for the resting field.
+`gapDetected`, `modeChanged`. The worker pipeline consumes these for the tape, the
+detectors and the order ages; the frame packer consumes state for the resting
+field. Nothing on the render side consumes events: since the sprite layer was
+removed, the book changing is the only mark a trade or a cancel makes.
 
 **Determinism.** The engine is a deterministic state machine over its command log.
 Synthetic mode uses a seeded PRNG (xoshiro128**); same seed → bit-identical event
@@ -221,10 +224,10 @@ stall, and fades back when live is healthy (§10).
 **Fills vs cancels.** From the order stream alone (§1): `amount_traded > 0` means
 fill, `= 0` means cancel. The engine's state authority is therefore the single,
 chain-verified `live_orders` stream — no cross-channel sequencing is needed for
-correctness. `live_trades` events join by order id to attach aggressor side and feed
-the tape, the trade flash, and the sweep detector; the join tolerates a small
-arrival skew between channels (annotations may attach ~50ms late; state never
-waits for them). Skew is measured and logged during capture.
+correctness. `live_trades` events join by order id and serve cross-validation and
+stats. The tape and the sweep detector read the engine's own trade events, whose
+aggressor is the side opposite the maker, so neither waits on the second channel.
+Skew between the channels is measured and logged during capture.
 
 **Divergence guard (defense in depth).** Every 30s, fetch the aggregated REST book
 (`group=1`) and compare best bid/offer within one tick plus top-10-level depth
@@ -282,13 +285,20 @@ What each visual channel carries (per the brief's encoding findings):
 | Vertical position | Price | the one metric, ordered quantity gets the best channel |
 | Horizontal position in row | Queue position | distance from the seam = distance from the trade |
 | Cell length | Order size | linear; min-clamp 1.5px, disclosed in explainer; never max-clamped — a whale order being enormous is the truth |
-| Luminance | Age | new orders arrive bright and settle; long-resting orders dim to embers — waiting made visible |
+| Luminance | Age | an order holds its side's color for its first minute, then dims to an ember over the next nine minutes: waiting made visible. No arrival brightening (removed 2026-09-23) |
 | Hue | Side (redundant with position) | blue/cyan bids, amber asks — CVD-safe pair, never red/green |
 | Bar shortening | A trade | the level lost exactly that much queue; no mark of its own |
 
 Events: an arriving order materializes at the back of its queue (~120ms alpha
 ramp — presentation of an instantaneous fact). That ramp is now the ONLY
-per-event animation in the piece. A cancel is the cell going, at the instant it
+per-event animation in the piece, and it is alpha only: until 2026-09-23 a new
+order also arrived bright, a 28% mix toward a hot tint that settled over 8s,
+and that flare was removed as an event flash (recorded as an owner decision with
+the change). A seeded order is not an arrival, so it skips the ramp: a
+snapshot stamps every order with one time, and the whole field used to fade
+in from 30% on every reseed. In reduced motion there is no ramp; an arrival
+simply appears. A
+cancel is the cell going, at the instant it
 went. A trade is the consumed queue getting shorter, at the instant it was
 consumed — the level's own geometry, not a mark laid over it. A sweep reads as
 queue after queue emptying up or down the seam. `is_liquidation` orders get a
@@ -357,6 +367,17 @@ reads thin. On the synthetic understudy that ceiling is what normally binds,
 which is the point — a fixed standpoint cannot drift, and rows come out ~7px
 tall instead of the 3px the raw extent produced.
 
+That is the synthetic picture only. On the live feed the frame is set by the
+price bound, not by the body or the ceiling: a live book holds ~6,500 occupied
+levels and only 6 to 126 of them sit within 5e-5 of mid, so the 75% walk in
+`packer.ts` always stops at the bound. The half-span is then about 320 ticks
+($3.20 either side), which gives ~1.1 px/tick, rows ~1 CSS px (0.67 on a 3x
+phone whose view is 750px tall), and a median of 12 to 16 occupied levels on
+screen (measured 2026-09-23 by packing the 120s test fixture and the bundled
+replay session).
+How heavy a live row should be is an open design question (price grouping). It
+is not decided here, and the ~7px figure above says nothing about live.
+
 Stillness is then the default state, not a resting point something approaches.
 **The camera never moves on its own** — and now it very nearly never moves at
 all. Between designed moves, `centerTick` and `pxPerTick` are not written. The
@@ -374,23 +395,51 @@ depending where it sits, and each row flips at its own moment as the field
 slides), and the DRAWN standpoint is rounded to a whole device pixel while the
 camera's own centre stays continuous for the deadband and glide math
 (`snapCenterToDeviceGrid`; `layout.ts` reads the same value, so hit-testing
-agrees). There is now
-exactly one automatic move: a 650ms smootherstep that lands on the market and
-ends, fired when the mid walks more than a tenth of the viewport off centre or
-when the committed zoom changes. Measured over 45s of the synthetic understudy,
-sampled every 100ms: centre, zoom, and length scale each take about nine
-distinct values — roughly one designed move apiece, and ~96% of frames write
-nothing at all.
+agrees). That snapped centre reaches the shader as a whole tick plus a pixel
+remainder (`splitCenterForGpu`), because a float32 uniform at BTC's price
+resolves only half a tick, which had quantized every pan and designed move
+into 4px jumps at 8 px/tick. There is now
+exactly one automatic move: a 650ms smootherstep to an endpoint fixed when it
+starts, fired when the mid has stayed more than a tenth of the viewport off
+centre for half a second, or when the committed zoom changes. The half second
+keeps a sweep that empties the touch and refills a few packs later from being
+framed at all; the fixed endpoint keeps a move from chasing a target that
+jumps under it. On a phone, a move started on such a blip reversed and then
+jumped the whole field 40 and 181 device px in single frames (measured
+2026-09-23, headless). If the market has moved on when the move lands, the
+deadband decides afresh. A hand on the zoom does not restart it (the
+centre finishes its move while the hand keeps the scale), and a crossed pack
+is not a target at all: live flow crosses for a message at a time, and on
+live a crossing that persists is a wrong book the pipeline reseeds (~8s). A
+replayed capture has no such guard, so a crossed stretch of a recording holds
+the last frame. Measured over 45s
+of the synthetic understudy, sampled every 100ms: centre, zoom, and length
+scale each take about nine distinct values — roughly one designed move apiece,
+and ~96% of frames write nothing at all. (That run predates the single commit
+of the length scale described next; the scale now takes one value per book.)
 
 The cell length scale anchors on the *visible core's* median order size, not any
 global statistic — whale quotes and far-tail dust drag a global median across
-decades — and it gets the same contract with a much wider deadband (0.5), since
-lengths only ever have to be right relative to each other. Scale is owned by
-whoever touched it last: auto reframing passes a 12% deadband before committing
+decades. It is committed once per book, as a cut, and then held exactly:
+lengths only ever have to be right relative to each other, and a scale that
+followed the noisy median behind a 0.5 deadband still re-lengthened every cell
+in the field two or three times a minute at rest (measured: x0.41 to x1.55).
+It is taken on the first frame a two-sided book holds 24 orders, and taken
+again only for a new book (a mode switch, or a degraded source: reseeding,
+reconnecting, a hidden tab) or a layout or width the old scale no longer fits.
+There is no eased move to cut in reduced motion; both modes get the same single
+cut. (Recorded 2026-09-23 as an owner decision with the change: the length scale
+is held once committed.) Zoom is owned by whoever touched it last: auto reframing
+passes a 12% deadband before committing
 (the fit breathes with every book change; chasing each breath made the field
 pump), freezes while the viewer is panned away, and yields entirely to a
 hand-set zoom until recenter — a viewer contemplating the whole field must
-never feel the camera stir under them. Travel is bounded by the book itself:
+never feel the camera stir under them. The one thing that may still change a
+hand-set zoom is the both-bests cap, and only by tightening it when a wider
+spread has held for half a second: it never hands the scale back (a cap that
+followed the spread both ways pumped the field, measured 34% peak-to-peak; one
+that tightened for any single pack kept a held 4.64 px/tick at 2.06 for good
+after one sweep on the recorded fixture). Travel is bounded by the book itself:
 15% of a screen of slack past the last resting order, then a firm edge —
 infinite empty scroll reads as being lost, and price space below the deepest bid
 is soon negative.
@@ -410,9 +459,9 @@ spread gap at dead center where thumb and eye rest. Each level is a full-width r
 queue front at the **left edge** (where consumption begins), arrivals joining at the
 right. Side is encoded by position (above/below the gap) plus the same hue pair.
 No history, no panels at rest; the instantaneous cross-section only. The desktop
-seam and the phone spine are two layouts of the same instanced cells; the resize/
-rotation transition between them is a designed moment (a single choreographed
-re-layout, not a reflow).
+seam and the phone spine are two layouts of the same instanced cells. A resize or
+rotation that crosses between them re-lays the same cells out in one frame, as a
+cut, and the length scale is taken again for the new layout.
 
 ### On engagement (progressive disclosure)
 
@@ -426,10 +475,14 @@ Nothing at rest; everything within one gesture:
    gap, price ticks along the seam, the control strip (pause, speed, mode), the
    tape (recent prints with aggressor side) in the bottom-right dead quadrant on
    desktop, a pull-up sheet on phone. Fades away after idle.
-3. **Detector captions** (§11) — when the market does something, one quiet sentence
-   appears near the seam ("a sell just swept 3 levels — $41k in 80ms"), then fades.
-   These fire without engagement; they are the piece narrating itself, and the tenth
-   minute's reward.
+3. **Detector captions** (§11) — when the market does something while the viewer is
+   engaged, one quiet sentence fades in near the top of the frame ("a sell just swept 3
+   levels — $41k in 80ms"), holds, and fades out. Captions are chrome: one that
+   fires at rest is dropped, not saved for later, and when the chrome hides the
+   caption ends with it. The detectors keep running either way, and the
+   screen-reader narration does not wait on engagement. Until 2026-09-23 captions
+   fired without engagement and rose 4px as they appeared; they now show only
+   while engaged, opacity only (recorded as an owner decision with the change).
 4. **The explainer** — from the provenance mark: what this is, what the queue means,
    what to watch for, what is and isn't real. Three short layers, never a wall.
 
@@ -448,7 +501,7 @@ Rejected composition: the Bookmap-style time-axis heatmap. The brief identifies 
 as both honest and cliché; more decisively, a scrolling history axis makes the
 present a thin edge of the screen, and this piece is about the *present tense* of
 the queue — who is in line now, waiting. Time is shown instead where it actually
-lives in a book: in the ages of the orders (luminance) and in the decay of events.
+lives in a book: in the ages of the orders (luminance).
 History exists only in explicit replay/scrub mode, labeled.
 
 ---
@@ -468,10 +521,12 @@ GL context to the worker behind the same frame-buffer interface.
 
 **The boundary.** The worker packs, at most once per frame, a compact binary frame:
 parallel typed arrays for live cells (price tick, size, side/flags, age-base, queue
-offset — queue prefix-sums computed in the worker), a small event list for
-animation triggers (trades, arrivals, cancels since last frame), and a stats block
-(BBO, spread, depth, mode, clocks, divergence). Transferred, not copied; two
-buffers ping-pong so steady state allocates nothing.
+offset — queue prefix-sums computed in the worker), a header (BBO, spread, depth,
+the camera's span hint, the book's extent, a book revision), and a meta object
+beside it (mode, clocks, the tape of recent trades, the caption and narration,
+stats). There is no event list: nothing on the main thread draws a trade or a
+cancel. Transferred, not copied; two buffers ping-pong so steady state allocates
+nothing.
 
 The "age-base" in that list is load bearing, and for a long time the code did
 not honour it: each instance carried its age at pack time, a number that
@@ -489,8 +544,10 @@ returned untouched. The renderer reads the same stamp and skips its upload,
 and — when nothing on the presentation side moved either — the draw. That last
 one has two guards, because age drives brightness and the clock does advance:
 it waits until the book has been still for longer than the 120ms arrival ramp
-(so none is in flight), and it never lets a drawn frame get older than 100ms
-(so the 8s settle cannot visibly stall). Invalidation is deliberately blunt —
+(so none is in flight), and it never lets a drawn frame get older than one
+second. Past the ramp the only age effect is the ember, which moves about a
+third of an 8-bit step per second, so a second of staleness is below what the
+display can show. Invalidation is deliberately blunt —
 any command reaching the engine, and any engine replacement, marks the frame
 stale, whether or not the book actually moved — because a rule you can check
 by reading one line beats one that needs every command's semantics audited.
@@ -504,9 +561,10 @@ live feed at ~130 messages a second changes the book most frames and skips
 little. `?hud=1` reports `packs/s` against the ~60 requested, so the real
 number is readable on the device rather than argued about. The renderer draws the latest
 frame it has; if two arrive between paints it drops the stale one — **resting-book
-states coalesce; discrete trade events are never dropped** (they ride the event
-list, and nothing is dropped on the way in — though since the sprite layer was
-removed nothing is drawn FROM them either: the book state carries every event's
+states coalesce; discrete trade events are never dropped** (every one reaches the
+worker's detectors, tape and trade stats; since the sprite layer was removed
+nothing is drawn from them, and the per-frame event list that used to carry them
+to the main thread is gone too: the book state carries every event's
 consequence).
 
 **Backpressure** follows the brief exactly: coalesce book state per frame; never
@@ -555,8 +613,8 @@ Concrete applications: the mid line sits at the real mid, never an eased one —
 modify is a death and a birth (venue semantics), never a slide. Trades are
 instantaneous, and now nothing outlives them: removing an animation can only
 remove an assertion, never add one. Replay time-compression is a labeled
-transformation of playback time. The reduced-motion mode (§13) replaces decays and
-easing with discrete cross-fades — a change of presentation only.
+transformation of playback time. The reduced-motion mode (§13) cuts where the full
+piece eases, a change of presentation only.
 
 ---
 
@@ -611,20 +669,25 @@ margin from the venue's internal ones.
 
 ## 11. Scenes and phenomena
 
-A detector layer watches engine events and cues captions and (subtle) camera moves.
-V1 detectors, chosen from the brief's ranking for frequency × payoff:
+A detector layer watches engine events and cues captions and the screen-reader
+narration. (Detector-driven camera cues were planned and never built: no detector
+reaches the camera, which moves only for the market leaving the frame or the
+viewer's hand.) V1 detectors, chosen from the brief's ranking for frequency ×
+payoff:
 
 1. **Spread breathing** — ambient; carried by the composition itself, no detector.
 2. **Sweep** — multi-level consumption by one aggressor side within a short window;
-   caption with levels, quantity, and dollar value; slight camera push.
+   caption with levels, quantity, and dollar value.
 3. **Replenishment** — refill rate into swept levels; caption when a hole knits
    closed ("refilled in 21s").
 4. **Cancel storm** — cancel-rate spike vs rolling baseline; caption cites the live
    cancel-to-trade ratio (routinely ~300:1, a number worth saying out loud).
 5. **Liquidity vacuum** — one side thin beyond threshold; the rarest and most
-   startling; celebrated when it occurs.
-6. **Quiet market** — low-rate regime (3am Sunday): slower camera, wider frame,
-   caption embraces it ("quiet — single orders are events now").
+   startling; celebrated when it occurs. It needs a book that has stood on both
+   sides for 10s to empty from, so a book assembling from nothing (the
+   understudy's cold start, or any reseed) is not narrated as a vacuum.
+6. **Quiet market** — low-rate regime (3am Sunday): caption embraces it ("quiet —
+   single orders are events now").
 
 Staged scenes (v1.5, synthetic/replay only, labeled): the opening-cross auction
 (book frozen, imbalance glowing, indicative price hunting, everything crossing at
@@ -665,9 +728,11 @@ spine must be solid first, and the brief agrees on the ordering.
   (left/right of seam, above/below gap). Verified with a CVD simulator.
 - **`prefers-reduced-motion`** gets a second piece of motion design, not an
   absence — though the gap has narrowed to almost nothing now that the piece
-  itself is still: the same designed reframes happen, cut instead of eased, and
-  the arrival ramp is a whisper rather than a fade. Same information, no
-  vestibular triggers.
+  itself is still: the same designed reframes and the viewer's glides happen,
+  cut instead of eased; an arrival appears with no ramp; the chrome appears and
+  leaves without a fade; a caption holds and then fades out over its last 0.7s.
+  The ~600ms mode dip stays, as a change of light rather than of position. Same
+  information, no vestibular triggers.
 - **Narration:** an ARIA live region updated every ~4s and on detector events with
   the sentence the worker already computes for captions — "spread two dollars,
   bids stacked three to one, a sell just swept two levels." The forcing function
@@ -724,7 +789,8 @@ CLAUDE.md, README with screenshots.
 - **Time-axis heatmap composition** — honest but cliché (brief), and it demotes the
   present-tense queue that is the piece's subject; argued in §7.
 - **Smoothing anything the market did** — forbidden by the truth rules; the only
-  eased quantities are camera and decay, which describe looking, not the market.
+  eased quantities are the camera, the chrome, and the arrival and mode-change
+  envelopes, which describe looking, not the market.
 - **A "demo mode" that stages drama in live mode** — the whole value of live is
   that nobody staged it.
 
