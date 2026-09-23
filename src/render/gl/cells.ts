@@ -1,4 +1,5 @@
 import { FRAME_HEADER_FLOATS, FRAME_STRIDE } from "../../worker/protocol";
+import { splitCenterForGpu } from "../layout";
 import { cornerBuffer, createProgram } from "./context";
 
 /**
@@ -263,7 +264,10 @@ export class CellPipeline {
       gl.vertexAttribPointer(1 + i, 1, gl.FLOAT, false, strideBytes, FRAME_HEADER_FLOATS * 4 + i * 4);
     }
     gl.uniform2f(this.uniforms.uViewPx, u.viewW, u.viewH);
-    gl.uniform1f(this.uniforms.uCenterTick, u.centerTick);
+    // Whole tick + folded remainder: the raw centre would be rounded to half
+    // a tick on its way into a float32 uniform. See splitCenterForGpu.
+    const center = splitCenterForGpu(u.centerTick, u.pxPerTick, u.centerYPx);
+    gl.uniform1f(this.uniforms.uCenterTick, center.tick);
     gl.uniform1f(this.uniforms.uPxPerTick, u.pxPerTick);
     gl.uniform1f(this.uniforms.uPxPerSat, u.pxPerSat);
     gl.uniform1f(this.uniforms.uSeamX, u.seamX);
@@ -272,7 +276,7 @@ export class CellPipeline {
     gl.uniform1f(this.uniforms.uMaxCellPx, u.maxCellPx);
     gl.uniform1f(this.uniforms.uDim, u.dim);
     gl.uniform1f(this.uniforms.uReduced, u.reduced ? 1 : 0);
-    gl.uniform1f(this.uniforms.uCenterYPx, u.centerYPx);
+    gl.uniform1f(this.uniforms.uCenterYPx, center.yPx);
     gl.uniform1f(this.uniforms.uDpr, u.dpr);
     gl.uniform1f(this.uniforms.uNowSec, u.nowSec);
     gl.uniform2f(this.uniforms.uBandPx, u.bandTopPx, u.bandBottomPx);

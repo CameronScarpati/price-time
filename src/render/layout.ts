@@ -2,9 +2,9 @@ import { Side } from "../engine/types";
 
 /**
  * The CPU mirror of the vertex shader's layout math — used for hit-testing
- * (the inspector) and for positioning event sprites at the cells they refer
- * to. If this and cells.ts ever disagree, the inspector reports the wrong
- * order, so both quote the same formulas.
+ * (the inspector) and for placing the overlay's price rules and gap readout
+ * against the rows they label. If this and cells.ts ever disagree, the
+ * inspector reports the wrong order, so both quote the same formulas.
  */
 export interface LayoutParams {
   viewW: number;
@@ -42,6 +42,26 @@ export function snapCenterToDeviceGrid(
   const devicePerTick = pxPerTick * dpr;
   if (!(devicePerTick > 0) || !Number.isFinite(devicePerTick)) return centerTick;
   return Math.round(centerTick * devicePerTick) / devicePerTick;
+}
+
+/**
+ * The drawn standpoint as the vertex shader receives it: a WHOLE tick, with
+ * the fraction folded into the pixel offset here, in float64.
+ *
+ * Uniforms reach the GPU as float32, and at BTC's price (~6.5M ticks) float32
+ * spacing is half a tick — 4 CSS px at 8 px/tick. Uploading the snapped
+ * centre as-is quantized every pan and designed move into 4px jumps with
+ * held frames between, undoing the device-grid snap above. A whole tick is
+ * exact in float32 below 2^24, so the shader's `uCenterTick - aTick` becomes
+ * an exact integer subtraction, and the sub-tick remainder rides in
+ * `uCenterYPx`, a few hundred pixels where float32 resolves ~3e-5 px. The
+ * sum is `tickToY` rearranged, so hit-testing (which stays float64) agrees.
+ */
+export function splitCenterForGpu(
+  centerTick: number, pxPerTick: number, centerYPx: number,
+): { tick: number; yPx: number } {
+  const tick = Math.round(centerTick);
+  return { tick, yPx: centerYPx + (centerTick - tick) * pxPerTick };
 }
 
 export function tickToY(tick: number, p: LayoutParams): number {
