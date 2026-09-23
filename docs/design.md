@@ -477,7 +477,7 @@ Nothing at rest; everything within one gesture:
    desktop, a pull-up sheet on phone. Fades away after idle.
 3. **Detector captions** (§11) — when the market does something while the viewer is
    engaged, one quiet sentence fades in near the top of the frame ("a sell just swept 3
-   levels — $41k in 80ms"), holds, and fades out. Captions are chrome: one that
+   levels: $41k in 80ms"), holds, and fades out. Captions are chrome: one that
    fires at rest is dropped, not saved for later, and when the chrome hides the
    caption ends with it. The detectors keep running either way, and the
    screen-reader narration does not wait on engagement. Until 2026-09-23 captions
@@ -488,14 +488,11 @@ Nothing at rest; everything within one gesture:
 
 ### Attribution and framing
 
-This is a portfolio piece by **Cameron Scarpati**, and the page says so without
-crowding the spell: the explainer's first layer opens with the byline and the
-framing — the beauty of markets, as he sees it — and a one-line credit sits in the
-engaged chrome next to the provenance mark ("a piece by Cameron Scarpati · data:
-Bitstamp"). Page `<title>`, meta description, and social-card tags carry the same
-credit. The README leads with the byline and is written to be read by someone
-deciding whether to hire the person who built it. Bitstamp's attribution (required
-posture, §1) and the author's credit are the only two names on the page.
+The page credits its author without crowding the spell: a one-line credit sits in
+the engaged chrome next to the provenance mark ("a piece by Cameron Scarpati · data:
+Bitstamp"), the explainer closes with the same credit and a link to the source, and
+the meta description and social-card tags carry it too. Bitstamp's attribution
+(required posture, §1) and the author's credit are the only two names on the page.
 
 Rejected composition: the Bookmap-style time-axis heatmap. The brief identifies it
 as both honest and cliché; more decisively, a scrolling history axis makes the
@@ -651,9 +648,9 @@ always says which clock the viewer is riding ("live" / "−38s · catching up").
 
 **Provenance.** One quiet, always-present line, bottom edge:
 
-- `● live — Bitstamp BTC/USD order flow → local matching engine`
-- `● simulated — seeded from live state 14s ago`
-- `● replay — recorded 2026-08-07, real Bitstamp flow`
+- `● live: Bitstamp BTC/USD order flow → local matching engine`
+- `● simulated: seeded from live state 14s ago`
+- `● replay: recorded 2026-08-07, real Bitstamp flow`
 
 The dot's shape+color encodes mode redundantly. **The label leads the data:** on
 any mode transition the mark changes at or before the first non-live pixel, never

@@ -2,12 +2,11 @@
 
 A single-page visualization of a live matching engine: real order-by-order flow
 from Bitstamp's public BTC/USD feed reconstructed through a price-time-priority
-engine built here, rendered as a still, wide, sharp order book. It is an art
-piece with an accuracy contract, and a portfolio piece for Cameron Scarpati.
-`docs/brief.md` is the research it stands on; `docs/design.md` is why
-everything is the way it is.
-Read this file fully before changing anything; read the relevant skill in
-`.claude/skills/` before touching its area.
+engine built here, rendered as a still, wide, sharp order book, with an
+accuracy contract. `docs/brief.md` is the research it stands on;
+`docs/design.md` records each design decision and its reasoning. The skills in
+`.claude/skills/` cover one area each (truth rules, engine invariants, book
+reconstruction, device performance, visual craft, verifying a change).
 
 ## Commands
 
@@ -46,7 +45,7 @@ project's spine — market state crosses it only as a packed, transferred
 - `src/ui/` — DOM chrome: provenance, controls, tape, inspector, explainer,
   ARIA narrator.
 
-## Invariants (not up for renegotiation)
+## Invariants
 
 - **Truth rules.** Every pixel that moves is caused by an engine event — and
   most events now move no pixel of their own, only the book. Interpolate
@@ -60,7 +59,7 @@ project's spine — market state crosses it only as a packed, transferred
   every command. See `.claude/skills/engine-invariants/`.
 - **Reconstruction.** A detected gap (broken `event_id` chain) or sustained
   divergence means discard the book and re-seed. There is no patch path, on
-  purpose — do not add one. See `.claude/skills/book-reconstruction/`.
+  purpose. See `.claude/skills/book-reconstruction/`.
 - **Disclosure.** The provenance mark always states the mode, and the label
   changes at or before the data does — never after.
 - **Stillness.** The frame holds: between designed moves the camera writes
@@ -78,47 +77,22 @@ project's spine — market state crosses it only as a packed, transferred
   it in the shader — so an unchanged book packs to identical bytes. The
   worker stamps each frame with a book revision and skips the pack when the
   buffer handed back still matches; anything that can move the book calls
-  `invalidateFrame()`. Add a per-frame derived value here and the skip
-  silently stops working; miss an invalidation and it shows a stale book.
+  `invalidateFrame()`. A per-frame derived value in the frame would stop the
+  skip from working; a missed invalidation would show a stale book.
 - **Numbers.** Integer ticks (cents) and sats only; venue decimal strings are
   parsed digit-wise (`parseDecimal`), never through floating point. Ticks are
   stored in Float64 — real books contain fishing orders past Int32 range.
 
-## Conventions actually enforced
+## Conventions
 
-- Domain vocabulary in code: maker/taker, aggressor, tick, sats, seq, BBO.
-- Zero runtime dependencies; dev-deps need a one-sentence defense in design.md.
-- TypeScript strict; no hidden globals; state lives in the class that owns it.
-- Comments say *why* (domain rules, numeric choices, deliberate oddities), not
-  what.
+- Zero runtime dependencies; TypeScript strict; domain vocabulary in code
+  (maker/taker, aggressor, tick, sats, seq, BBO).
+- Not implemented by design (reasons in `docs/design.md` §4, §7, §8, §10):
+  stops, pegs, hidden orders, self-trade prevention, an aggregated (L2)
+  fallback feed, a time-axis heatmap, looping replay, OffscreenCanvas,
+  SharedArrayBuffer.
 
-## How to verify a change really works
-
-1. `pnpm typecheck && pnpm test`.
-2. **Watch it** — tests cannot see this artifact. Run it and look for a full
-   minute; check a narrow viewport; open `?hud=1`. If touching modes: kill the
-   network (or relay) mid-session and watch the labeled cross-fade, no spinner.
-   If touching motion: check `prefers-reduced-motion` still has designed motion.
-3. Reconstruction changes: run the soak (≥20 min; 60 for release). Pass mark:
-   BBO within one tick of the venue continuously, zero unexplained gaps.
-4. Renderer/worker perf changes: `test/perf/pack-bench` plus the HUD on real
-   hardware — emulator numbers are not evidence
-   (`.claude/skills/device-performance/`).
-
-## Deliberately not done (do not "fix")
-
-- Engine: stops, pegs, hidden orders, GTD, self-trade prevention — the live feed
-  cannot express them; v1 scenes don't need them (design §4).
-- No Binance/L2 fallback — an aggregated book has no queue; it fails the premise
-  (design §10, argued deviation from the brief).
-- No time-axis heatmap composition; present-tense queue instead (design §7).
-- Replay never loops; a finished capture hands off to synthetic, labeled.
-- Rendering on main thread (not OffscreenCanvas) with the flip condition
-  recorded in design §8. No SharedArrayBuffer (breaks static hosting).
-- Seeded orders start at age 0 — the venue snapshot does not carry creation
-  times; ages are honest only from arrival onward.
-
-## Feed facts that will bite you (verified live, 2026-08)
+## Feed facts (verified live, 2026-08)
 
 - `order_deleted`/`order_changed` carry `amount_traded` **per event**: 0 means
   cancel/resize, >0 means fill. This is the fill-vs-cancel attribution; no
@@ -126,6 +100,8 @@ project's spine — market state crosses it only as a packed, transferred
 - `order_changed` can carry a **price change** — a real venue modify. It must
   relocate the order to the back of the new level (cancel + re-add), never
   resize in place.
+- `order_deleted` can name an order that never rested, priced off the cent
+  grid (a recorded `63941.91523761`); a deletion is applied by id alone.
 - `live_orders` messages form a verified hash chain (`pre_event_id` →
   `event_id`); ~100–160 msg/s quiet, 99.7% of deletions are cancels.
 - `group=2` REST snapshots list same-price orders in queue order (ascending id),
