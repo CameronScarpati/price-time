@@ -15,14 +15,73 @@ import { Overlay } from "./overlay";
  * ordering, because everything it draws comes out of the transferred frame.
  */
 
-/** The one framing profile, both layouts. See the camera's follow(). maxPpt
- * is a ceiling on how CLOSE the camera may ever stand; the body-of-the-book
- * span normally binds well before it (~7-9 px/tick), and it exists so a
- * four-level book cannot become a close-up of four bricks. */
 /** Frame-time history the HUD reports over — ~10s at 60fps. */
 const FRAME_TIME_WINDOW = 600;
 
+/** The one framing profile, both layouts. See the camera's follow(). maxPpt
+ * is a ceiling on how CLOSE the camera may ever stand, so a four-level book
+ * cannot become a close-up of four bricks. Which limit binds depends on the
+ * book. On the synthetic understudy the body-of-the-book span is narrow and
+ * the ceiling binds (8 px/tick, rows ~7px). On a live book the span hint is
+ * set by the price bound (packer.ts), about 320 ticks either side, and the
+ * camera stands near 1.1 px/tick with rows near 1 CSS px (measured
+ * 2026-09-23 on the recorded fixture and the bundled replay). */
 const BIRDS_EYE = { frac: 0.82, minPpt: 0.05, maxPpt: 8 } as const;
+
+/** Resting orders a two-sided book must hold before its length scale is
+ * taken. The scale's statistic (median top-level order, or p80 level depth
+ * on the spine) is noise on a handful of orders, and that matters only for
+ * the understudy assembling from nothing — a venue snapshot or a seeded
+ * handoff arrives whole, thousands of orders in one frame, and commits on
+ * its first frame. Measured over synthetic seeds 1-60 against each book's
+ * own 20-90s median: committing at 24 orders lands within half-to-double
+ * (the band where lengths still read right relative to each other) in 59 of
+ * 60 seeds for the median and 58 of 60 for p80, ~3s after boot (max 8s);
+ * at 8 orders it misses in 7 and 25 of 60. The steady book's own statistic
+ * wanders about that far, so waiting longer buys little. */
+const LENGTH_SCALE_MIN_ORDERS = 24;
+
+/**
+ * The length scale (px per sat): committed ONCE per book, as a cut, then
+ * held exactly. A scale is a lens on real sizes, so it may move — but every
+ * move re-lengthens every cell in the field, and one that followed a noisy
+ * median re-committed two or three times a minute at rest (measured: x0.41
+ * to x1.55, plus three moves while the book assembled). Cell lengths only
+ * have to be right RELATIVE to each other, which any committed scale gives.
+ *
+ * A new book is the only reason to look again: a mode switch, or a degraded
+ * source (reseeding, reconnecting, a hidden tab), which always ends in a
+ * fresh book; so does a viewport the old scale no longer fits (the spine
+ * scales by width, the seam by order size). There is no eased move to cut
+ * in reduced motion — both modes are the same single cut.
+ */
+export class LengthScale {
+  private committed = false;
+  private degraded = false;
+  private layout = -1;
+  private viewW = -1;
+
+  constructor(public pxPerSat: number) {}
+
+  /** Once per worker frame, with its metadata. */
+  frame(meta: Pick<FrameMeta, "transition" | "degraded">): void {
+    this.degraded = meta.degraded;
+    if (meta.transition !== null || meta.degraded) this.committed = false;
+  }
+
+  /** Every drawn frame: the ideal scale for the book and viewport on screen.
+   * Taken on the first frame the book has assembled; ignored after that. */
+  offer(target: number, orders: number, twoSided: boolean, layout: 0 | 1, viewW: number): void {
+    // Only the spine (layout 1) scales by width; a seam window dragged wider
+    // keeps its book's scale.
+    if (layout !== this.layout || (layout === 1 && viewW !== this.viewW)) this.committed = false;
+    this.layout = layout;
+    this.viewW = viewW;
+    if (this.committed || this.degraded || !twoSided || orders < LENGTH_SCALE_MIN_ORDERS) return;
+    this.pxPerSat = target;
+    this.committed = true;
+  }
+}
 
 interface HeldFrame {
   buffer: ArrayBuffer;
@@ -52,14 +111,7 @@ export class Renderer {
   private spare: ArrayBuffer | null = null;
   private requestInFlight = false;
 
-  private pxPerSat = 42 / 8_000_000;
-  /** Deadbanded length scale plus the finite move onto it — same contract as
-   * the camera's zoom, for the same reason: the median size shifts every
-   * frame, and chasing it forever kept every cell's ends re-snapping against
-   * the device grid, which is a field that quietly boils. */
-  private committedPxPerSat = 42 / 8_000_000;
-  private scaleFromPxPerSat = 42 / 8_000_000;
-  private scaleMoveStartMs = 0;
+  private readonly lengthScale = new LengthScale(42 / 8_000_000);
   private transitionStartMs = 0;
   private dpr = 1;
 
@@ -91,7 +143,7 @@ export class Renderer {
     this.overlay = new Overlay(overlayCanvas);
     this.layoutParams = {
       viewW: 0, viewH: 0, centerTick: 0, pxPerTick: 8,
-      pxPerSat: this.pxPerSat, seamX: 0, layout: 0,
+      pxPerSat: this.lengthScale.pxPerSat, seamX: 0, layout: 0,
     };
 
     worker.addEventListener("message", (e: MessageEvent<WorkerToMain>) => {
@@ -185,7 +237,8 @@ export class Renderer {
     // the median top-level ORDER reads ~26px — queue segments are the star.
     // Spine (phone): width is scarce, so scale by LEVEL depth instead — a
     // typical top row spans ~62% of the screen; scaling by order size there
-    // left every row huddled at the left edge.
+    // left every row huddled at the left edge. Taken once per book, then
+    // held: see LengthScale.
     let targetPxPerSat: number;
     if (p.layout === 1) {
       const p80Level = Math.max(f32[Header.CoreLevelP80Sats], 200_000);
@@ -194,7 +247,7 @@ export class Renderer {
       const coreMedian = Math.max(frame.meta.stats.coreMedianSats, 50_000);
       targetPxPerSat = 26 / coreMedian;
     }
-    this.advanceLengthScale(targetPxPerSat, nowMs);
+    this.lengthScale.offer(targetPxPerSat, f32[Header.InstanceCount], mid !== 0, p.layout, cssW);
 
     // The camera's own centre stays continuous (the deadband and the glide
     // math need it); what gets DRAWN stands on the device grid, so a pan
@@ -202,7 +255,7 @@ export class Renderer {
     // across them. See snapCenterToDeviceGrid.
     p.centerTick = snapCenterToDeviceGrid(this.camera.centerTick, this.camera.pxPerTick, this.dpr);
     p.pxPerTick = this.camera.pxPerTick;
-    p.pxPerSat = this.pxPerSat;
+    p.pxPerSat = this.lengthScale.pxPerSat;
     p.seamX = p.layout === 0 ? cssW * 0.5 : 10;
 
     let dim = 0;
@@ -258,33 +311,6 @@ export class Renderer {
     this.overlay.draw(p, this.bestBid, this.bestAsk, 2, this.delegate.chromeAlpha());
   }
 
-  /** Commit the length scale only when the distribution has really moved,
-   * then travel onto it once, finitely, and hold it exactly. */
-  private advanceLengthScale(target: number, nowMs: number): void {
-    // A very wide deadband, far wider than the camera's: the median
-    // top-level order size is a noisy statistic on a thin book, and every
-    // commit is 650ms of every cell in the field changing length. Cell
-    // lengths only ever have to be right RELATIVE to each other, so being
-    // half or double the ideal median is invisible while a field that keeps
-    // re-scaling is not. Measured at 45s of the synthetic understudy: the
-    // scale moves on under 2% of frames here, against ~10% at 0.3 and every
-    // single frame under the old asymptotic ease.
-    if (Math.abs(target / this.committedPxPerSat - 1) > 0.5) {
-      this.committedPxPerSat = target;
-      this.scaleFromPxPerSat = this.pxPerSat;
-      this.scaleMoveStartMs = nowMs;
-    }
-    if (this.scaleMoveStartMs === 0) return;
-    const t = (nowMs - this.scaleMoveStartMs) / 650;
-    if (t >= 1) {
-      this.pxPerSat = this.committedPxPerSat;
-      this.scaleMoveStartMs = 0;
-      return;
-    }
-    const e = t * t * t * (t * (6 * t - 15) + 10);
-    this.pxPerSat = this.scaleFromPxPerSat + (this.committedPxPerSat - this.scaleFromPxPerSat) * e;
-  }
-
   /** One opaque backdrop draw replaces clear + room + vignette: room gradient
    * and vignette are the same static radial math, and on a 3x 120Hz phone
    * every saved fullscreen pass is real battery. (No phosphor, no
@@ -317,6 +343,7 @@ export class Renderer {
    * cell going; both are the book itself changing, not an effect over it. */
   private consumeMeta(meta: FrameMeta, nowMs: number): void {
     if (meta.transition !== null) this.transitionStartMs = nowMs;
+    this.lengthScale.frame(meta);
     this.delegate.onMeta(meta);
   }
 
