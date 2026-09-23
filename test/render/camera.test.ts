@@ -13,6 +13,8 @@ import { Camera } from "../../src/render/camera";
  */
 
 const PROFILE = { frac: 0.5, minPpt: 4.5, maxPpt: 32 };
+/** The both-bests cap at an 800px viewport, computed as the camera does. */
+const cap = (spread: number): number => (800 * 0.55) / (spread + 12);
 
 function primed(): Camera {
   const cam = new Camera();
@@ -20,6 +22,9 @@ function primed(): Camera {
   cam.update(16, performance.now(), false);
   return cam;
 }
+
+/** Half a second: how long a drift or a wider spread must hold, as in the camera. */
+const HOLD_MS = 500;
 
 function runFrames(cam: Camera, frames: number): void {
   let now = performance.now();
@@ -77,56 +82,131 @@ describe("camera scale ownership and book bounds", () => {
     expect(Math.abs(cam.pxPerTick / settled - 1)).toBeLessThan(0.01);
   });
 
-  it("a held zoom past the both-bests cap does not pump with the spread's breath", () => {
+  it("a held zoom past the both-bests cap tightens once, then holds exactly still through the spread's breath", () => {
     const cam = primed();
     cam.wheelZoom(-2000); // deep in: the hand-set scale sits far above the cap
+    // Whole-tick spreads breathing 2 <-> 4 on a 192ms period: slow enough
+    // that a scale chasing the raw cap would visibly move with it. (A flip
+    // every frame hid exactly that pump: the 180ms zoom ease averaged it.)
+    // Every stretch at 4 lasts 96ms, under the hold, so the cap the camera
+    // honours is the spread that persists: 2.
+    const spreadAt = (i: number): number => (Math.floor(i / 6) % 2 === 0 ? 2 : 4);
     let now = performance.now() + 16;
-    for (let i = 0; i < 60; i++) {
-      now += 16;
-      cam.follow(10_000, 30, 2 + 0.5 * (i % 2), 800, PROFILE);
-      cam.update(16, now, false);
-    }
-    const settled = cam.pxPerTick;
-    // The spread breathes every frame. The audited defect: min(held, rawCap)
-    // retargeted on each breath and the whole field pumped ~5%. The
-    // deadbanded cap must hold the scale still through the same breathing.
-    const seen: number[] = [];
     for (let i = 0; i < 120; i++) {
       now += 16;
-      cam.follow(10_000, 30, 2 + 0.5 * (i % 2), 800, PROFILE);
+      cam.follow(10_000, 30, spreadAt(i), 800, PROFILE);
       cam.update(16, now, false);
-      seen.push(cam.pxPerTick);
     }
-    expect(Math.max(...seen) / Math.min(...seen) - 1).toBeLessThan(0.005);
-    expect(Math.abs(cam.pxPerTick / settled - 1)).toBeLessThan(0.01);
+    // The one tighten: down to the persisting spread's cap, 440 / (2 + 12).
+    expect(cam.pxPerTick).toBe(cap(2));
+    const seen = new Set<number>();
+    for (let i = 120; i < 360; i++) {
+      now += 16;
+      cam.follow(10_000, 30, spreadAt(i), 800, PROFILE);
+      cam.update(16, now, false);
+      seen.add(cam.pxPerTick);
+    }
+    // Not "within a percent" — one value, every frame.
+    expect([...seen]).toEqual([cap(2)]);
   });
 
-  it("the deadbanded cap still tightens instantly and releases on a real narrowing", () => {
+  it("a one-pack spread spike cannot tighten a held zoom for good", () => {
+    // Replayed live flow: 4.64 px/tick held, then one sweep's 218-tick
+    // spread for a pack or two, and the tighten-only cap kept the view at
+    // 2.06 px/tick for the rest of the session.
     const cam = primed();
     cam.wheelZoom(-2000);
     let now = performance.now() + 16;
-    for (let i = 0; i < 60; i++) {
-      now += 16;
-      cam.follow(10_000, 30, 2, 800, PROFILE);
-      cam.update(16, now, false);
-    }
+    const run = (spread: number, frames: number): void => {
+      for (let i = 0; i < frames; i++) {
+        now += 16;
+        cam.follow(10_000, 30, spread, 800, PROFILE);
+        cam.update(16, now, false);
+      }
+    };
+    run(2, 120);
+    expect(cam.pxPerTick).toBe(cap(2));
+    run(218, 3); // 48ms: a sweep, refilled
+    run(2, 120);
+    expect(cam.pxPerTick).toBe(cap(2));
+  });
+
+  it("a held zoom's both-bests cap tightens when the spread widens and never releases on its own", () => {
+    const cam = primed();
+    cam.wheelZoom(-2000);
+    let now = performance.now() + 16;
+    const run = (spread: number, frames: number): void => {
+      for (let i = 0; i < frames; i++) {
+        now += 16;
+        cam.follow(10_000, 30, spread, 800, PROFILE);
+        cam.update(16, now, false);
+      }
+    };
     // The cap binds: held 64 ppt, cap 440/14 ~ 31.4.
-    expect(cam.pxPerTick).toBeGreaterThan(30);
-    expect(cam.pxPerTick).toBeLessThan(32);
-    // Widen: both bests must keep fitting NOW — no deadband on the way down.
-    for (let i = 0; i < 40; i++) {
+    run(2, 120);
+    expect(cam.pxPerTick).toBe(cap(2));
+    // Widen: both bests must keep fitting, so the held scale shrinks.
+    run(20, 120);
+    expect(cam.pxPerTick).toBe(cap(20));
+    // Narrow: the cap lifts, but the scale is the hand's, tightened — the
+    // camera does not zoom back in by itself.
+    run(1, 120);
+    expect(cam.pxPerTick).toBe(cap(20));
+  });
+
+  it("a hand on the zoom mid-reframe does not restart the move: the centre lands on time", () => {
+    const cam = primed();
+    let now = performance.now() + 16;
+    // The market walks 30 ticks out (past the 80px band at ~6.7 px/tick) and
+    // stays; after the hold (frame 33) the move begins.
+    for (let i = 0; i < 33; i++) {
       now += 16;
-      cam.follow(10_000, 30, 20, 800, PROFILE);
+      cam.follow(10_030, 30, 2, 800, PROFILE);
       cam.update(16, now, false);
     }
-    expect(cam.pxPerTick).toBeLessThan(15);
-    // Narrow far past the deadband: a designed release, more zoom allowed.
-    for (let i = 0; i < 80; i++) {
+    expect(cam.centerTick).toBe(10_000);
+    let prev = cam.pxPerTick;
+    // The viewer wheels out a notch on EVERY frame of the move.
+    for (let i = 0; i < 41; i++) {
       now += 16;
-      cam.follow(10_000, 30, 0.5, 800, PROFILE);
+      cam.follow(10_030, 30, 2, 800, PROFILE);
+      cam.wheelZoom(40);
       cam.update(16, now, false);
+      // The hand's zoom answers every event: never flat across a wheel.
+      expect(cam.pxPerTick).toBeLessThan(prev);
+      prev = cam.pxPerTick;
     }
-    expect(cam.pxPerTick).toBeGreaterThan(30);
+    // 41 frames x 16ms = 656ms after the move began: one 650ms move, landed.
+    // Cancelling on each wheel event restarted it from rest every frame and
+    // the centre did not move at all while the hand was on the wheel.
+    expect(cam.centerTick).toBe(10_030);
+  });
+
+  it("a PageUp/Down leap during a reframe cancels it rather than jumping at its end", () => {
+    const cam = primed();
+    let now = performance.now() + 16;
+    for (let i = 0; i < 33; i++) {
+      now += 16;
+      cam.follow(10_030, 30, 2, 800, PROFILE);
+      cam.update(16, now, false); // the drift holds; the reframe begins
+    }
+    now += 160;
+    cam.update(16, now, false);
+    const partway = cam.centerTick;
+    expect(partway).toBeGreaterThan(10_000);
+    expect(partway).toBeLessThan(10_030);
+    cam.nudge(-20);
+    const seen: number[] = [partway];
+    let t = performance.now();
+    for (let i = 0; i < 60; i++) {
+      t += 16;
+      cam.follow(10_030, 30, 2, 800, PROFILE);
+      cam.update(16, t, false);
+      seen.push(cam.centerTick);
+    }
+    expect(cam.centerTick).toBe(Math.round(partway - 20));
+    // One direction only: the leap, never a leg back toward the market.
+    for (let i = 1; i < seen.length; i++) expect(seen[i]).toBeLessThanOrEqual(seen[i - 1]);
   });
 
   it("freezes auto zoom while detached", () => {
@@ -198,9 +278,118 @@ describe("camera scale ownership and book bounds", () => {
   it("cuts rather than eases the same move in reduced motion", () => {
     const cam = primed();
     runFrames(cam, 10);
+    const t = performance.now() + 16 * 12;
     cam.follow(10_030, 30, 2, 800, PROFILE);
-    cam.update(16, performance.now() + 16 * 12, true);
-    expect(cam.centerTick).toBe(10_030); // one frame, not 650ms
+    cam.update(16, t, true);
+    expect(cam.centerTick).toBe(10_000); // not yet: a drift must hold
+    cam.follow(10_030, 30, 2, 800, PROFILE);
+    cam.update(16, t + HOLD_MS + 1, true);
+    expect(cam.centerTick).toBe(10_030); // then one frame, not 650ms
+  });
+
+  it("never frames a blip: a mid that jumps out and back within the hold moves nothing", () => {
+    // A sweep empties the touch and refills a few packs later; the mid
+    // jumps ~9 ticks for 100ms. Framing that started a move toward a target
+    // that had already gone home.
+    for (const reduced of [false, true]) {
+      const cam = primed();
+      let now = performance.now() + 16;
+      const seen = new Set<number>();
+      for (let i = 0; i < 200; i++) {
+        now += 16;
+        const blip = i % 50 < 6; // 96ms out, every 800ms
+        cam.follow(blip ? 10_030 : 10_000, 30, blip ? 23 : 2, 800, PROFILE);
+        cam.update(16, now, reduced);
+        seen.add(cam.centerTick);
+        seen.add(cam.pxPerTick * 1e9);
+      }
+      expect(seen.size).toBe(2); // one centre, one scale, every frame
+    }
+  });
+
+  it("a move lands where it planned to, even when the market jumps in flight, then moves again", () => {
+    const cam = primed();
+    let now = performance.now() + 16;
+    const path: number[] = [];
+    let begun = -1;
+    for (let i = 0; i < 200; i++) {
+      now += 16;
+      if (begun < 0 && cam.centerTick !== 10_000) begun = i;
+      // Out to 10_030 and held; mid-move the market jumps on to 10_060.
+      const mid = begun >= 0 && i >= begun + 20 ? 10_060 : 10_030;
+      cam.follow(mid, 30, 2, 800, PROFILE);
+      cam.update(16, now, false);
+      path.push(cam.centerTick);
+    }
+    // The first move ends exactly on its own endpoint...
+    expect(path).toContain(10_030);
+    // ...and the second finishes on the market.
+    expect(path[path.length - 1]).toBe(10_060);
+    // One direction only, and no frame steps further than smootherstep's
+    // steepest 16ms of a 30-tick, 650ms move (1.875 x 30 x 16/650 ~ 1.38).
+    for (let i = 1; i < path.length; i++) {
+      expect(path[i]).toBeGreaterThanOrEqual(path[i - 1]);
+      expect(path[i] - path[i - 1]).toBeLessThanOrEqual(1.39);
+    }
+  });
+
+  it("cuts PageUp/Down and a released drag in reduced motion instead of dropping them", () => {
+    const cam = primed();
+    let now = performance.now();
+    cam.nudge(-50);
+    cam.update(16, (now += 16), true);
+    expect(cam.centerTick).toBe(9_950); // the leap, in one frame
+    cam.nudge(-50); // chains from where the last one landed
+    cam.update(16, (now += 16), true);
+    expect(cam.centerTick).toBe(9_900);
+    cam.panTicks(-25.3); // 9874.7
+    cam.fling(0.37); // would coast ~96 ticks
+    cam.update(16, (now += 16), true);
+    expect(cam.centerTick).toBe(9_971); // landed, on the tick grid
+  });
+
+  it("a crossed pack does not move the frame, in either motion mode", () => {
+    for (const reduced of [false, true]) {
+      const cam = new Camera();
+      let now = performance.now();
+      cam.follow(10_000, 30, 2, 800, PROFILE);
+      cam.update(16, now, reduced);
+      const center = cam.centerTick;
+      const ppt = cam.pxPerTick;
+      // A real fixture moment: one pack crossed by 2,302 ticks, its mid
+      // 1,151 ticks away. |spread| would have collapsed the touch cap to
+      // ~0.19 px/tick — in reduced motion, a one-frame whole-field cut.
+      cam.follow(11_151, 30, -2_302, 800, PROFILE);
+      cam.update(16, (now += 16), reduced);
+      expect(cam.centerTick).toBe(center);
+      expect(cam.pxPerTick).toBe(ppt);
+      // Uncrossed again: nothing to undo, and no move was started.
+      for (let i = 0; i < 60; i++) {
+        cam.follow(10_000, 30, 2, 800, PROFILE);
+        cam.update(16, (now += 16), reduced);
+        expect(cam.centerTick).toBe(center);
+        expect(cam.pxPerTick).toBe(ppt);
+      }
+    }
+  });
+
+  it("a crossed pack cannot ratchet a held zoom out", () => {
+    const cam = primed();
+    cam.wheelZoom(-2000);
+    let now = performance.now() + 16;
+    const run = (mid: number, spread: number, frames: number): void => {
+      for (let i = 0; i < frames; i++) {
+        now += 16;
+        cam.follow(mid, 30, spread, 800, PROFILE);
+        cam.update(16, now, false);
+      }
+    };
+    run(10_000, 2, 120);
+    expect(cam.pxPerTick).toBe(cap(2));
+    // Tighten-only would keep a cap this deep forever; the pack is ignored.
+    run(11_151, -2_302, 1);
+    run(10_000, 2, 120);
+    expect(cam.pxPerTick).toBe(cap(2));
   });
 
   it("clamps panning a little past the deepest order, no further", () => {
