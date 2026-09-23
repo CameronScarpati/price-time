@@ -27,7 +27,7 @@ function boot(): void {
   try {
     renderer = new Renderer(glCanvas, overlayCanvas, worker, ui);
   } catch {
-    ui.fatal("this piece needs WebGL2 — a browser from the last few years will have it");
+    ui.fatal("this piece needs WebGL2; a browser from the last few years will have it");
     return;
   }
 

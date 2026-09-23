@@ -15,20 +15,20 @@ import type { FrameMeta, InspectionResult, MainToWorker, WorkerToMain } from "..
  */
 
 const MODE_LABEL: Record<string, string> = {
-  live: "live — Bitstamp BTC/USD order flow → local matching engine",
-  synthetic: "simulated — synthetic agents, seeded from the last real book",
-  "synthetic-cold": "simulated — synthetic agents (live feed unreachable)",
-  replay: "replay — recorded Bitstamp BTC/USD flow → local matching engine",
+  live: "live: Bitstamp BTC/USD order flow → local matching engine",
+  synthetic: "simulated: synthetic agents, seeded from the last real book",
+  "synthetic-cold": "simulated: synthetic agents, not seeded from a real book",
+  replay: "replay: recorded Bitstamp BTC/USD flow → local matching engine",
 };
 
 // The disclosure line is the piece's one standing sentence; on a phone the
 // desktop copy ellipsizes mid-word, so narrow screens get a short form with
 // the mode word still first (the label-leads rule is untouched).
 const MODE_LABEL_SHORT: Record<string, string> = {
-  live: "live — Bitstamp BTC/USD → local engine",
-  synthetic: "simulated — seeded from the last real book",
-  "synthetic-cold": "simulated — synthetic agents",
-  replay: "replay — recorded Bitstamp BTC/USD flow",
+  live: "live: Bitstamp BTC/USD → local engine",
+  synthetic: "simulated: seeded from the last real book",
+  "synthetic-cold": "simulated: synthetic agents",
+  replay: "replay: recorded Bitstamp BTC/USD flow",
 };
 
 /** A full chrome fade, 0 to 1 or back. A partial one (the target flipped
@@ -403,47 +403,47 @@ export class Ui {
     };
     section("What is this?",
       "A live financial market, drawn from its raw parts. Every rectangle is one real " +
-      "resting order on the Bitstamp BTC/USD order book — buyers below in blue, sellers " +
-      "above in amber — placed by someone, somewhere, right now. The gap in the middle is " +
+      "resting order on the Bitstamp BTC/USD order book, placed by someone, somewhere, " +
+      "right now: buyers below in blue, sellers above in amber. The gap in the middle is " +
       "the spread: the distance between the highest price anyone will pay and the lowest " +
       "price anyone will accept. Watch it breathe.");
     section("The queue is the point",
-      "At every price, orders wait in line — first to arrive, first to trade. That line is " +
+      "At every price, orders wait in line: first to arrive, first to trade. That line is " +
       "usually invisible: most market data adds the queue up into a single number. Here each " +
       "order keeps its place: cells near the center line are next to trade, cells at the tail " +
       "may wait hours. Brightness is age: a new order holds its full color for about a " +
       "minute, then slowly dims as it waits. " +
       "Tap any cell to see its position, how much is ahead of it, and how long it has waited.");
     section("What to watch for",
-      "Most quotes are withdrawn, not filled — the constant flicker is quoting machines " +
+      "Most quotes are withdrawn, not filled. The constant flicker is quoting machines " +
       "changing their minds hundreds of times a minute. A trade has no mark of its own: it " +
       "is the queue at the center line getting shorter, cells vanishing from the front of " +
       "the line where they were next to trade. A sweep is several prices emptying in a row, " +
       "one large order eating through them, and afterwards the market simply is somewhere " +
-      "else. Then watch the hole refill — that is liquidity healing. At rest the frame " +
+      "else. Then watch the hole refill: that is liquidity healing. At rest the frame " +
       "holds still on the book around the price; zoom in and a queue becomes countable, " +
       "one cell per order; zoom out and the far dim ones are wishes parked miles from the " +
       "price, some resting for days.");
     section("Finding your way",
       "Drag up or down to wander the price axis; scroll or pinch to zoom all " +
-      "the way from single orders out to the market's whole shape — once you " +
+      "the way from single orders out to the market's whole shape. Once you " +
       "set a zoom, it holds until you return. Arrow keys travel too: tap to " +
       "step a few rows, hold to accelerate through the book; PageUp and " +
       "PageDown leap a screen at a time. Double-tap, double-click, or Home " +
-      "snaps back to where the market is trading — a “follow the market” " +
-      "button also appears whenever you have wandered off. Space pauses; " +
+      "snaps back to the current price, and a “follow the market” button " +
+      "also appears whenever you have wandered off. Space pauses; " +
       "what you miss while paused replays on the way back, labeled.");
     section("Is it real?",
       "Yes, with one honest caveat. The order flow is Bitstamp's public feed, reconstructed " +
-      "through a matching engine built for this piece — so at rare margins its matches can " +
+      "through a matching engine built for this piece, so at rare margins its matches can " +
       "differ from the venue's own. The label at the bottom always says what you are seeing: " +
       "live, replay of a recording, or simulated (when the feed drops, synthetic traders " +
       "seeded from the last real book keep the market breathing until it returns). Nothing " +
       "on screen is decoration: every mark is caused by an order event.");
     el("h2", "", panel, "Credits");
     const credits = el("p", "", panel,
-      "A piece by Cameron Scarpati — a view of the beauty living inside market " +
-      "microstructure. Market data: Bitstamp (BTC/USD). Engine, reconstruction, and " +
+      "A piece by Cameron Scarpati: a view of the beauty living inside the order " +
+      "book. Market data: Bitstamp (BTC/USD). Engine, reconstruction, and " +
       "rendering are original work; source at ");
     const link = document.createElement("a");
     link.href = "https://github.com/CameronScarpati/price-time";

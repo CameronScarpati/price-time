@@ -53,7 +53,7 @@ moving you can't name the event for.
 ## 4. Mode ladder (when touching pipeline/sources/ui)
 
 Kill the feed mid-session (stop the relay, or drop the network) and watch:
-label flips to "simulated — seeded from the last real book" at or before the
+label flips to "simulated: seeded from the last real book" at or before the
 texture changes, book does not jump, no spinner ever. Restore the feed; it
 should hand back to live within ~30s. Check `prefers-reduced-motion` still
 has designed motion, and Tab reaches every control.

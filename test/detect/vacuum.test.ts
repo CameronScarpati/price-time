@@ -53,7 +53,7 @@ describe("vacuum detector", () => {
     expect(d.currentCaption()).toBeNull();
     hold(d, 12_000, 12_100, 80 * M, 2 * M); // the offer side empties
     expect(d.currentCaption()?.text).toBe(
-      "the offer side just emptied near the touch — a liquidity vacuum",
+      "the offer side just emptied near the touch: a liquidity vacuum",
     );
   });
 

@@ -108,7 +108,7 @@ export class Detectors {
     const verb = s.aggressor === S.Bid ? "buy" : "sell";
     this.say(
       "sweep",
-      `a ${verb} just swept ${s.ticks.size} levels — ${btc(s.sats)} in ${ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`}`,
+      `a ${verb} just swept ${s.ticks.size} levels: ${btc(s.sats)} in ${ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`}`,
       nowMs, 8_000,
     );
     s.endedMs = nowMs;
@@ -127,7 +127,7 @@ export class Detectors {
       if (w.depthAfter === undefined) {
         w.depthAfter = near;
       } else if (near >= w.depthAfter + w.sats * 0.7 && elapsed > 5_000) {
-        this.say("refill", `the hole just refilled — ${(elapsed / 1000).toFixed(0)}s to heal`, nowMs, 20_000);
+        this.say("refill", `the hole just refilled: ${(elapsed / 1000).toFixed(0)}s to heal`, nowMs, 20_000);
         this.watchingRefill = null;
       } else if (elapsed > 120_000) {
         this.watchingRefill = null;
@@ -141,7 +141,7 @@ export class Detectors {
     if (cancelsPerSec > this.cancelBaselinePerSec * 3 && this.cancelTimes.length > 120) {
       this.say(
         "cancel-storm",
-        `${this.cancelTimes.length} quotes pulled in 10s — ${(cancelsPerSec / Math.max(this.cancelBaselinePerSec, 0.1)).toFixed(0)}× the usual pace`,
+        `${this.cancelTimes.length} quotes pulled in 10s: ${(cancelsPerSec / Math.max(this.cancelBaselinePerSec, 0.1)).toFixed(0)}× the usual pace`,
         nowMs, 30_000,
       );
     }
@@ -163,7 +163,7 @@ export class Detectors {
       this.twoSidedSinceMs = null;
       if (stood && thick > 10_000_000) {
         const side = bid < ask ? "bid" : "offer";
-        this.say("vacuum", `the ${side} side just emptied near the touch — a liquidity vacuum`, nowMs, 30_000);
+        this.say("vacuum", `the ${side} side just emptied near the touch: a liquidity vacuum`, nowMs, 30_000);
       }
     } else if (thick > 0) {
       this.twoSidedSinceMs ??= nowMs;
@@ -174,7 +174,7 @@ export class Detectors {
     if (this.msgTimes.length < 40) {
       this.quietSince ??= nowMs;
       if (nowMs - this.quietSince > 30_000) {
-        this.say("quiet", "a quiet market — single orders are events now", nowMs, 120_000);
+        this.say("quiet", "a quiet market: single orders are events now", nowMs, 120_000);
       }
     } else {
       this.quietSince = null;
