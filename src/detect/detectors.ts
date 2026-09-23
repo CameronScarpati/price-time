@@ -6,8 +6,9 @@ import { formatDecimal } from "../sources/bitstamp/decimal";
  * Phenomenon detectors (docs/design.md §11): small state machines over the
  * engine's event stream that notice the moments worth narrating — a sweep, a
  * refill, a cancel storm, a vacuum, a quiet market — and produce the captions
- * and the screen-reader narration. Detection is data; when and how a caption
- * fades is presentation and lives with the renderer.
+ * and the screen-reader narration. Detection is data; whether a caption shows
+ * (only while the viewer is engaged) and how it fades is presentation and
+ * lives with the UI (ui.ts, style.css).
  *
  * All time here is wall-clock milliseconds from the pipeline (detection
  * happens at observation time, and cooldowns are about the viewer, not the
@@ -41,6 +42,15 @@ const btc = (sats: Sats): string => {
   return `${s.replace(/0+$/, "").replace(/\.$/, "")} BTC`;
 };
 
+/** How long the near book must have stood on both sides before one side
+ * emptying counts as a vacuum. Long enough for a book assembling from
+ * nothing to have formed: the synthetic understudy's median cold start holds
+ * ~30 orders at 5s, ~39 at 10s and ~58 at steady state (measured, seeds
+ * 1-30), and a 5s baseline still narrated a thin book's sides being swept
+ * clean from 6s on. A live book arrives whole in its seed, so live only waits
+ * this out after a (re)seed. */
+const VACUUM_BASELINE_MS = 10_000;
+
 export class Detectors {
   private caption: { text: string; id: number } | null = null;
   private captionSeq = 0;
@@ -54,6 +64,12 @@ export class Detectors {
   private msgTimes: number[] = [];
   private lastTradeTick: PriceTick | null = null;
   private quietSince: number | null = null;
+  /** Since when the near book has stood on both sides — the vacuum's
+   * baseline. A side that never stood cannot "just empty": at cold start the
+   * book assembles from nothing and one side routinely fills first. Without
+   * this, 7 of 30 synthetic seeds narrated a vacuum in their first half
+   * second (measured: 90s fake-timer runs of the pipeline, seeds 1-30). */
+  private twoSidedSinceMs: number | null = null;
 
   /** Feed one batch of engine events observed at wall time `nowMs`. */
   observe(events: readonly EngineEvent[], nowMs: number): void {
@@ -130,15 +146,27 @@ export class Detectors {
       );
     }
 
-    // Vacuum: one side of the near book empties while the other stands.
+    // Vacuum: one side of the near book empties while the other stands —
+    // an event, so it needs a two-sided book to empty FROM. The baseline
+    // resets on entering the vacuum, so a book that stays lopsided is said
+    // once, not every cooldown. Both sides zero means there is no two-sided
+    // touch to measure, which is also what a side swept out entirely looks
+    // like: that holds the baseline, so the frame the wiped side starts to
+    // refill is the vacuum. A book that is really new resets it
+    // (bookReplaced).
     const { bidDepthNearSats: bid, askDepthNearSats: ask } = book;
-    if (bid + ask > 0) {
-      const thin = Math.min(bid, ask);
-      const thick = Math.max(bid, ask);
-      if (thick > 0 && thin / thick < 0.1 && thick > 10_000_000) {
+    const thin = Math.min(bid, ask);
+    const thick = Math.max(bid, ask);
+    if (thick > 0 && thin / thick < 0.1) {
+      const stood =
+        this.twoSidedSinceMs !== null && nowMs - this.twoSidedSinceMs >= VACUUM_BASELINE_MS;
+      this.twoSidedSinceMs = null;
+      if (stood && thick > 10_000_000) {
         const side = bid < ask ? "bid" : "offer";
         this.say("vacuum", `the ${side} side just emptied near the touch — a liquidity vacuum`, nowMs, 30_000);
       }
+    } else if (thick > 0) {
+      this.twoSidedSinceMs ??= nowMs;
     }
 
     // Quiet: a market where single orders become events.
@@ -153,6 +181,12 @@ export class Detectors {
     }
   }
 
+  /** The book was replaced wholesale (a seed, including every source's
+   * first): nothing before it is a baseline for what comes after. */
+  bookReplaced(): void {
+    this.twoSidedSinceMs = null;
+  }
+
   private say(key: string, text: string, nowMs: number, cooldownMs: number): void {
     const last = this.lastCaptionAt.get(key);
     if (last !== undefined && nowMs - last < cooldownMs) return;
@@ -160,7 +194,7 @@ export class Detectors {
     this.caption = { text, id: ++this.captionSeq };
   }
 
-  /** The most recent caption (renderer decides how long it lingers). */
+  /** The most recent caption (the UI decides whether and how long it shows). */
   currentCaption(): { text: string; id: number } | null {
     return this.caption;
   }

@@ -229,7 +229,9 @@ export class Pipeline {
       this.afterEngineEvents(events);
       if (this.mode === "synthetic") this.synthetic?.feedback(events);
       if (event.cmd.kind === "seed") {
-        // A fresh book: ages restart from what the venue reported.
+        // A fresh book: ages restart from what the venue reported, and the
+        // detectors' baselines restart with it.
+        this.detectors.bookReplaced();
         this.restedAtMs.clear();
         const nowMs = Date.now();
         for (const o of event.cmd.orders) {
