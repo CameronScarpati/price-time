@@ -165,6 +165,25 @@ export interface ResizedEvent {
   to: Sats;
   seq: Seq;
 }
+/**
+ * The taker's own report of a fill (external mode only). Bitstamp announces
+ * an aggressor with order_created, so it rests for the length of its matching
+ * step, and reports each fill on it as well as on the maker. The maker's
+ * report is the print (a trade at the maker's price); this one only takes the
+ * quantity off the taker. Not a trade: it would print every fill twice.
+ */
+export interface TakenEvent {
+  kind: "taken";
+  id: OrderId;
+  side: Side;
+  /** Where the taker rests: its own limit, not the execution price. */
+  tick: PriceTick;
+  /** Quantity this report took off the taker. */
+  sats: Sats;
+  /** The taker's quantity after it; 0 means it left the book. */
+  remaining: Sats;
+  seq: Seq;
+}
 /** An aggressor's remainder that could not fill and does not rest (market/IOC). */
 export interface UnfilledEvent {
   kind: "unfilled";
@@ -229,6 +248,7 @@ export type EngineEvent =
   | TradeEvent
   | CanceledEvent
   | ResizedEvent
+  | TakenEvent
   | UnfilledEvent
   | RejectedEvent
   | SeededEvent

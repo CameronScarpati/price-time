@@ -319,6 +319,107 @@ describe("external authority (live mode)", () => {
     expect(engine.unexpectedAnomalyCount()).toBe(0);
   });
 
+  it("a fill prints once, from the maker at its price; the taker's own reports only take its quantity", () => {
+    // Bitstamp's order: the taker arrives as order_created at its limit, and
+    // each fill is reported on the taker first, at the execution price, then
+    // on the maker. All of it carries the taker's arrival time.
+    const engine = new Engine("external");
+    engine.apply({ kind: "rest", id: 1, side: Side.Ask, tick: 10001, sats: 30, micro: 1 });
+    engine.apply({ kind: "rest", id: 2, side: Side.Ask, tick: 10002, sats: 30, micro: 2 });
+    engine.apply({ kind: "rest", id: 9, side: Side.Bid, tick: 10005, sats: 50, micro: 5 });
+
+    const takerFirst = engine.apply({
+      kind: "reduce", id: 9, side: Side.Bid, tick: 10001, sats: 20, tradedSats: 30, micro: 5,
+    });
+    // Not a modify: the taker keeps its place at its own limit, and nothing prints.
+    expect(takerFirst).toEqual([
+      expect.objectContaining({ kind: "taken", id: 9, tick: 10005, sats: 30, remaining: 20 }),
+    ]);
+    expect(engine.bids.levels.get(10005)?.totalSats).toBe(20);
+
+    const makerFirst = engine.apply({ kind: "remove", id: 1, tradedSats: 30, micro: 5 });
+    expect(trades(makerFirst)).toEqual([
+      expect.objectContaining({ makerId: 1, tick: 10001, sats: 30, aggressor: Side.Bid, makerRemaining: 0 }),
+    ]);
+
+    const takerLast = engine.apply({ kind: "remove", id: 9, tradedSats: 20, micro: 5 });
+    expect(takerLast).toEqual([
+      expect.objectContaining({ kind: "taken", id: 9, tick: 10005, sats: 20, remaining: 0 }),
+    ]);
+    expect(engine.bestBid()).toBeUndefined();
+
+    const makerLast = engine.apply({
+      kind: "reduce", id: 2, side: Side.Ask, tick: 10002, sats: 10, tradedSats: 20, micro: 5,
+    });
+    expect(trades(makerLast)).toEqual([
+      expect.objectContaining({ makerId: 2, tick: 10002, sats: 20, aggressor: Side.Bid, makerRemaining: 10 }),
+    ]);
+    expect(engine.bestAsk()).toBe(10002);
+    expect(engine.unexpectedAnomalyCount()).toBe(0);
+  });
+
+  it("a taker's remaining is applied as the venue states it, and a mismatch on it is not divergence", () => {
+    // A market order's remaining does not always step down by exactly what
+    // it traded. Its quantity is the venue's own bookkeeping, not our book.
+    const engine = new Engine("external");
+    engine.apply({ kind: "rest", id: 1, side: Side.Ask, tick: 10001, sats: 100, micro: 1 });
+    engine.apply({ kind: "rest", id: 9, side: Side.Bid, tick: 10002, sats: 150, micro: 5 });
+    const events = engine.apply({
+      kind: "reduce", id: 9, side: Side.Bid, tick: 10001, sats: 40, tradedSats: 100, micro: 5,
+    });
+    expect(events).toEqual([
+      expect.objectContaining({ kind: "taken", id: 9, sats: 110, remaining: 40 }),
+    ]);
+    expect(engine.unexpectedAnomalyCount()).toBe(0);
+  });
+
+  it("a maker placed and hit within one venue millisecond still prints", () => {
+    const engine = new Engine("external");
+    engine.apply({ kind: "rest", id: 1, side: Side.Bid, tick: 10000, sats: 50, micro: 5 });
+    engine.apply({ kind: "rest", id: 2, side: Side.Ask, tick: 9990, sats: 20, micro: 5 });
+    // The taker reports first, while it still stands crossed against the older bid.
+    const taker = engine.apply({ kind: "remove", id: 2, tradedSats: 20, micro: 5 });
+    expect(taker.map((e) => e.kind)).toEqual(["taken"]);
+    const maker = engine.apply({
+      kind: "reduce", id: 1, side: Side.Bid, tick: 10000, sats: 30, tradedSats: 20, micro: 5,
+    });
+    expect(trades(maker)).toEqual([
+      expect.objectContaining({ makerId: 1, tick: 10000, sats: 20, aggressor: Side.Ask, makerRemaining: 30 }),
+    ]);
+  });
+
+  it("a taker's reports print nothing even when the local book is wrong", () => {
+    // A reseed replays a matching step whose maker the snapshot no longer
+    // holds: nothing stands against the taker, and it still must not print.
+    const reseeded = new Engine("external");
+    reseeded.apply({
+      kind: "seed",
+      orders: [{ id: 1, side: Side.Bid, tick: 10000, sats: 50, micro: 1 }],
+    });
+    reseeded.apply({ kind: "rest", id: 9, side: Side.Bid, tick: 10005, sats: 50, micro: 5 });
+    const taker = reseeded.apply({ kind: "remove", id: 9, tradedSats: 50, micro: 5 });
+    expect(taker.map((e) => e.kind)).toEqual(["taken"]);
+    const maker = reseeded.apply({ kind: "remove", id: 3, tradedSats: 50, micro: 5 });
+    expect(trades(maker)).toEqual([]);
+    expect(reseeded.unexpectedAnomalyCount()).toBe(0);
+
+    // A stale bid the venue no longer holds crosses a maker placed in the
+    // same millisecond as the taker that hits it. The maker still prints.
+    const stale = new Engine("external");
+    stale.apply({
+      kind: "seed",
+      orders: [{ id: 1, side: Side.Bid, tick: 10100, sats: 50, micro: 0 }],
+    });
+    stale.apply({ kind: "rest", id: 2, side: Side.Ask, tick: 10050, sats: 20, micro: 5 });
+    stale.apply({ kind: "rest", id: 9, side: Side.Bid, tick: 10060, sats: 20, micro: 5 });
+    expect(stale.apply({ kind: "remove", id: 9, tradedSats: 20, micro: 5 }).map((e) => e.kind)).toEqual([
+      "taken",
+    ]);
+    expect(trades(stale.apply({ kind: "remove", id: 2, tradedSats: 20, micro: 5 }))).toEqual([
+      expect.objectContaining({ makerId: 2, tick: 10050, sats: 20, aggressor: Side.Bid }),
+    ]);
+  });
+
   it("re-applying a rest for a known order is idempotent and keeps queue position", () => {
     const engine = new Engine("external");
     engine.apply({ kind: "rest", id: 1, side: Side.Bid, tick: 10000, sats: 50, micro: 1 });

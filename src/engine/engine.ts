@@ -8,6 +8,7 @@ import {
   type Command,
   type EngineEvent,
   type MatchAuthority,
+  type Micro,
   type OrderId,
   type PlaceCmd,
   type PriceTick,
@@ -47,6 +48,9 @@ export class Engine {
   private seq: Seq = 0;
   /** Venue-disagreement counters, by kind (live mode diagnostics). */
   readonly anomalies = new Map<AnomalyKind, number>();
+  /** The order the venue announced most recently (external mode), which is
+   * the one whose matching step is under way. */
+  private lastArrival: OrderId | null = null;
 
   constructor(authority: MatchAuthority) {
     this.authority = authority;
@@ -236,6 +240,7 @@ export class Engine {
   // -------------------------------------------------------------------------
 
   private seed(orders: SeedOrder[], events: EngineEvent[]): void {
+    this.lastArrival = null;
     this.store.clear();
     this.bids.ticks.length = 0;
     this.bids.levels.clear();
@@ -273,6 +278,9 @@ export class Engine {
   }
 
   private rest(cmd: RestCmd, events: EngineEvent[]): void {
+    // Even an announcement we cannot rest (a market order's placeholder
+    // price) starts that order's matching step.
+    this.lastArrival = cmd.id;
     if (!isValidSats(cmd.sats) || !isValidTick(cmd.tick)) {
       this.countAnomaly("invalid-external-value", cmd.id, events);
       return;
@@ -301,7 +309,17 @@ export class Engine {
       return;
     }
 
-    if ((this.store.side[slot] as Side) !== cmd.side || this.store.tick[slot] !== cmd.tick) {
+    // A taker's own fill report names the execution price, which is not a
+    // modify: the order stays where it rests, and only the maker prints.
+    const taker =
+      cmd.tradedSats > 0 &&
+      (this.store.side[slot] as Side) === cmd.side &&
+      this.isTakerReport(slot, cmd.micro, cmd.tick);
+
+    if (
+      !taker &&
+      ((this.store.side[slot] as Side) !== cmd.side || this.store.tick[slot] !== cmd.tick)
+    ) {
       // The venue moved the order (a price modify is a real Bitstamp
       // order_changed) — and a move is a cancel plus a re-add at the back,
       // never a slide. A side change would be stranger still; both relocate,
@@ -325,12 +343,22 @@ export class Engine {
     if (cmd.tradedSats > 0 && delta > 0) {
       // A fill. The venue's own per-event traded quantity should equal our
       // local delta; when it doesn't, the venue knows something we don't —
-      // apply the venue's end state and count the disagreement.
+      // apply the venue's end state and count the disagreement. A taker's
+      // quantity is the venue's own bookkeeping for an order that leaves
+      // within its arrival millisecond, so a mismatch there says nothing
+      // about our book (a market order's remaining does not always step
+      // down by exactly what it traded): its reports are applied uncounted.
+      if (taker) {
+        this.takeFromTaker(slot, delta, events);
+        return;
+      }
       if (delta !== cmd.tradedSats) this.countAnomaly("traded-mismatch", cmd.id, events);
       this.consumeSlot(slot, delta, opposite(cmd.side), null, events);
       return;
     }
-    if (cmd.tradedSats > 0 && delta <= 0) this.countAnomaly("traded-mismatch", cmd.id, events);
+    if (cmd.tradedSats > 0 && delta <= 0 && !taker) {
+      this.countAnomaly("traded-mismatch", cmd.id, events);
+    }
     if (cmd.sats === current) return;
     if (cmd.sats === 0) {
       // Resized to nothing without a trade: that is a cancel, and leaving a
@@ -340,7 +368,7 @@ export class Engine {
     }
     if (cmd.sats > current) this.countAnomaly("grew-in-place", cmd.id, events);
     events.push({
-      kind: "resized", id: cmd.id, side: cmd.side, tick: cmd.tick,
+      kind: "resized", id: cmd.id, side: cmd.side, tick: this.store.tick[slot],
       from: current, to: cmd.sats, seq: this.seq++,
     });
     this.sideBook(cmd.side).resize(this.store, slot, cmd.sats);
@@ -358,13 +386,38 @@ export class Engine {
       // equal the venue's final traded slice; book what actually left our
       // book, and count any disagreement in magnitude.
       const current = this.store.sats[slot];
-      if (Number.isSafeInteger(cmd.tradedSats) && cmd.tradedSats !== current) {
+      const taker = this.isTakerReport(slot, cmd.micro, null);
+      if (!taker && Number.isSafeInteger(cmd.tradedSats) && cmd.tradedSats !== current) {
         this.countAnomaly("traded-mismatch", cmd.id, events);
       }
-      this.consumeSlot(slot, current, opposite(this.store.side[slot] as Side), null, events);
+      if (taker) this.takeFromTaker(slot, current, events);
+      else this.consumeSlot(slot, current, opposite(this.store.side[slot] as Side), null, events);
       return;
     }
     this.removeResting(slot, events);
+  }
+
+  /**
+   * Is this fill report the taker's side of the match? Bitstamp announces an
+   * aggressor with order_created at its own limit, so it rests here for the
+   * length of its matching step, and then reports every fill on itself as
+   * well as on the maker. Only the maker's report may print: it names the
+   * maker's price and, taken with the maker's side, the aggressor.
+   *
+   * The venue matches one incoming order at a time, and every report of its
+   * step carries the venue time of its arrival. So a fill report is the
+   * taker's when it names the order announced last and carries that order's
+   * own arrival time. A maker placed and hit within one millisecond (seen
+   * once in the 120s golden capture) is not the order announced last, since
+   * its taker was announced after it. A report that names a price other
+   * than the order's own is a taker's too, because a maker always fills at
+   * its own price. None of this reads the book, so it holds when the local
+   * book is wrong: when a reseed replays a step whose makers the snapshot no
+   * longer holds, or when a stale order crosses it.
+   */
+  private isTakerReport(slot: number, micro: Micro, tick: PriceTick | null): boolean {
+    if (this.store.micro[slot] !== micro) return false;
+    return this.store.id[slot] === this.lastArrival || (tick !== null && tick !== this.store.tick[slot]);
   }
 
   /** Snapshot/buffer overlap reconciliation for an id we already hold: adopt
@@ -426,6 +479,33 @@ export class Engine {
       sats: qty,
       makerRemaining: remaining,
       liquidation: (this.store.flags[slot] & FLAG_LIQUIDATION) !== 0,
+      seq: this.seq++,
+    });
+    if (remaining > 0) {
+      book.resize(this.store, slot, remaining);
+    } else {
+      book.unlink(this.store, slot);
+      this.store.free(slot);
+    }
+  }
+
+  /**
+   * The taker's side of a venue fill (external mode only): the quantity
+   * leaves the resting aggressor, and nothing prints. The maker's own report
+   * of the same fill prints it, through consumeSlot, at the maker's price.
+   * This is not a second consumption path: no maker's queue is consumed here.
+   */
+  private takeFromTaker(slot: number, qty: Sats, events: EngineEvent[]): void {
+    const side = this.store.side[slot] as Side;
+    const book = this.sideBook(side);
+    const remaining = this.store.sats[slot] - qty;
+    events.push({
+      kind: "taken",
+      id: this.store.id[slot],
+      side,
+      tick: this.store.tick[slot],
+      sats: qty,
+      remaining,
       seq: this.seq++,
     });
     if (remaining > 0) {

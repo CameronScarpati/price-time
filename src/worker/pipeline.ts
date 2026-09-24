@@ -269,6 +269,10 @@ export class Pipeline {
           this.restedAtMs.delete(event.id);
           break;
         }
+        case "taken":
+          // The taker's side of a venue fill. The maker's trade is the print.
+          if (event.remaining === 0) this.restedAtMs.delete(event.id);
+          break;
         default:
           break;
       }

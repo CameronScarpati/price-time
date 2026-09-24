@@ -219,25 +219,36 @@ describe("engine invariants under arbitrary command sequences", () => {
 // corrupt structure.
 // ---------------------------------------------------------------------------
 
+// `hold` keeps the venue timestamp of the op before it: one venue millisecond
+// carries a taker's arrival and all of its fill reports, and it is the shared
+// timestamp that routes a fill report to the taker's side of the match. A
+// reduce or remove with id 0 names the order the last rest placed, so a
+// taker's own reports can follow its arrival.
 type LiveOp =
-  | { t: "rest"; id: number; side: 0 | 1; tickOff: number; sats: number }
-  | { t: "reduce"; id: number; side: 0 | 1; tickOff: number; sats: number; traded: number }
-  | { t: "remove"; id: number; traded: number };
+  | { t: "rest"; id: number; side: 0 | 1; tickOff: number; sats: number; hold: boolean }
+  | { t: "reduce"; id: number; side: 0 | 1; tickOff: number; sats: number; traded: number; hold: boolean }
+  | { t: "remove"; id: number; traded: number; hold: boolean };
+
+const arbReportId = fc.oneof(
+  { weight: 3, arbitrary: fc.integer({ min: 1, max: 40 }) },
+  { weight: 1, arbitrary: fc.constant(0) },
+);
 
 const arbLiveOp: fc.Arbitrary<LiveOp> = fc.oneof(
   { weight: 4, arbitrary: fc.record({
       t: fc.constant("rest" as const), id: fc.integer({ min: 1, max: 40 }),
       side: fc.constantFrom<0 | 1>(0, 1), tickOff: fc.integer({ min: 0, max: 20 }),
-      sats: fc.integer({ min: 1, max: 500 }),
+      sats: fc.integer({ min: 1, max: 500 }), hold: fc.boolean(),
     }) },
   { weight: 3, arbitrary: fc.record({
-      t: fc.constant("reduce" as const), id: fc.integer({ min: 1, max: 40 }),
+      t: fc.constant("reduce" as const), id: arbReportId,
       side: fc.constantFrom<0 | 1>(0, 1), tickOff: fc.integer({ min: 0, max: 20 }),
       sats: fc.integer({ min: 0, max: 500 }), traded: fc.integer({ min: 0, max: 500 }),
+      hold: fc.boolean(),
     }) },
   { weight: 3, arbitrary: fc.record({
-      t: fc.constant("remove" as const), id: fc.integer({ min: 1, max: 40 }),
-      traded: fc.integer({ min: 0, max: 500 }),
+      t: fc.constant("remove" as const), id: arbReportId,
+      traded: fc.integer({ min: 0, max: 500 }), hold: fc.boolean(),
     }) },
 );
 
@@ -246,18 +257,21 @@ describe("external authority under arbitrary venue streams", () => {
     fc.assert(
       fc.property(fc.array(arbLiveOp, { maxLength: 200 }), (ops) => {
         const engine = new Engine("external");
-        let micro = 1;
+        let micro = 0;
+        let lastRest = 1;
         for (const op of ops) {
           const tick = BASE_TICK + ("tickOff" in op ? op.tickOff : 0);
+          if (!op.hold) micro++;
           if (op.t === "rest") {
-            engine.apply({ kind: "rest", id: op.id, side: op.side as Side, tick, sats: op.sats, micro: micro++ });
+            lastRest = op.id;
+            engine.apply({ kind: "rest", id: op.id, side: op.side as Side, tick, sats: op.sats, micro });
           } else if (op.t === "reduce") {
             engine.apply({
-              kind: "reduce", id: op.id, side: op.side as Side, tick,
-              sats: op.sats, tradedSats: op.traded, micro: micro++,
+              kind: "reduce", id: op.id || lastRest, side: op.side as Side, tick,
+              sats: op.sats, tradedSats: op.traded, micro,
             });
           } else {
-            engine.apply({ kind: "remove", id: op.id, tradedSats: op.traded, micro: micro++ });
+            engine.apply({ kind: "remove", id: op.id || lastRest, tradedSats: op.traded, micro });
           }
           expect(checkInvariants(engine)).toEqual([]);
         }
