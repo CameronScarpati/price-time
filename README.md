@@ -15,11 +15,12 @@ built for this piece.
 A piece by **Cameron Scarpati**: a view of the beauty living inside the order
 book.
 
-![Live mode: hovering the best offer reveals a real 1.7 BTC order, first in
-queue, six seconds old, on a thin post-selloff night when single orders were
-events](docs/images/live-inspector.png)
-*Live mode on a thin night. The inspector is reading a real order: 1.73 BTC
-offered at $63,929.88, first of five in its queue, waiting six seconds.*
+![Live mode: hovering the best offer reveals a real 0.17 BTC order at
+$84,349.99, fourth of five in its queue behind 0.00128135 BTC, two seconds
+old](docs/images/live-inspector.png)
+*Live mode. The inspector is reading a real order: 0.17 BTC offered at
+$84,349.99, fourth of five in its queue with 0.00128135 BTC ahead of it,
+waiting two seconds.*
 
 ## The queue, made visible
 
