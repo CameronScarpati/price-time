@@ -1,8 +1,11 @@
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CHROME_FADE_MS, chromeFadeAlpha, Ui } from "../../src/ui/ui";
+import { Side } from "../../src/engine/types";
 import type { Renderer } from "../../src/render/renderer";
-import type { FrameMeta } from "../../src/worker/protocol";
+import type {
+  FrameMeta, InspectionResult, MainToWorker, WorkerToMain,
+} from "../../src/worker/protocol";
 
 /**
  * The chrome is the only DOM that moves, and it moves on the same terms as
@@ -97,13 +100,17 @@ class FakeNode {
 
 let clock = 0;
 
-function makeUi(reduced = false): { ui: Ui; root: FakeNode } {
+function stubDom(reduced = false): void {
   vi.stubGlobal("document", {
     createElement: () => new FakeNode(),
     createTextNode: () => new FakeNode(),
   });
   vi.stubGlobal("window", { addEventListener: () => {} });
   vi.stubGlobal("matchMedia", (q: string) => ({ matches: reduced && q.includes("reduced-motion") }));
+}
+
+function makeUi(reduced = false): { ui: Ui; root: FakeNode } {
+  stubDom(reduced);
   const root = new FakeNode();
   const worker = { addEventListener: () => {}, postMessage: () => {} };
   const renderer = { camera: { detached: false } };
@@ -261,6 +268,75 @@ describe("Ui captions speak only while engaged", () => {
     expect(caption.classList.contains("caption-show")).toBe(false);
     // The full-screen band must never take the pointer from the canvas.
     expect(band.style.pointerEvents).toBeUndefined();
+  });
+});
+
+describe("Ui inspector", () => {
+  // One tick per 8px about a centre at y=400, the seam at x=400: the best bid
+  // (tick 999) is the row at y=408 left of the seam, the best offer (tick
+  // 1001) the row at y=392 right of it.
+  function makeInspectorUi() {
+    stubDom();
+    vi.stubGlobal("innerWidth", 1440);
+    vi.stubGlobal("innerHeight", 860);
+    const posted: MainToWorker[] = [];
+    let onMessage: (e: { data: WorkerToMain }) => void = () => {};
+    const worker = {
+      addEventListener: (_type: string, fn: typeof onMessage) => void (onMessage = fn),
+      postMessage: (msg: MainToWorker) => void posted.push(msg),
+    };
+    const renderer = {
+      camera: { detached: false },
+      layoutParams: {
+        centerTick: 1000, pxPerTick: 8, viewH: 800, centerYFrac: 0.5,
+        seamX: 400, layout: 0, pxPerSat: 1,
+      },
+      bestBid: 999,
+      bestAsk: 1001,
+    };
+    const root = new FakeNode();
+    const ui = new Ui(
+      root as unknown as HTMLElement,
+      worker as unknown as Worker,
+      () => renderer as unknown as Renderer,
+      false,
+    );
+    const lastAsk = () => {
+      const asks = posted.filter((m) => m.type === "inspect");
+      return asks[asks.length - 1]!;
+    };
+    const reply = (token: number, result: InspectionResult | null) =>
+      onMessage({ data: { type: "inspection", token, result } });
+    return { ui, inspector: root.find("inspector"), posted, lastAsk, reply };
+  }
+
+  const order = (id: number, side: Side, tick: number): InspectionResult => ({
+    id, side, tick, sats: 1e8, aheadSats: 0,
+    queuePosition: 1, queueLength: 1, ageSec: 2, liquidation: false,
+  });
+
+  it("describes the order under the pointer when a re-check lands mid-ask", () => {
+    const { ui, inspector, posted, lastAsk, reply } = makeInspectorUi();
+    ui.inspectAt(390, 408);
+    reply(lastAsk().token, order(1, Side.Bid, 999));
+    expect(inspector.style.opacity).toBe("1");
+
+    // Straight to the offer, and a frame past the 400ms re-check arrives
+    // before the worker answers. The re-check must not take the newer token
+    // and bring the bid back.
+    ui.inspectAt(410, 392);
+    const ask = lastAsk();
+    expect(ask).toMatchObject({ side: Side.Ask, tick: 1001 });
+    clock = 1000;
+    ui.onMeta(meta(null));
+    reply(ask.token, order(2, Side.Ask, 1001));
+    const prices = inspector.children.filter((c) => c.className === "inspector-price");
+    expect(prices[prices.length - 1]!.textContent).toBe("1 BTC offer @ $10.01");
+
+    // From here the re-check follows the offer.
+    clock = 1500;
+    ui.onMeta(meta(null));
+    expect(posted[posted.length - 1]).toMatchObject({ type: "watch", id: 2 });
   });
 });
 

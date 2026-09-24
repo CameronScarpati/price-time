@@ -315,6 +315,10 @@ export class Ui {
       this.hideInspector();
       return;
     }
+    // Stop re-resolving the order the box showed before: a watch sent while
+    // this ask is out would take a newer token, drop this reply, and put the
+    // old order back under the pointer.
+    this.watchedId = null;
     const token = ++this.inspectToken;
     this.post({ type: "inspect", token, side: hit.side, tick: hit.tick, cumSats: Math.round(hit.cumSats) });
     this.inspector.style.left = `${Math.min(clientX + 14, innerWidth - 260)}px`;
