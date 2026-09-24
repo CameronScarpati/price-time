@@ -135,6 +135,13 @@ Every dependency defended in a sentence; everything else is written here.
   three.js/pixi/regl would add hundreds of KB to avoid ~300 lines of GL setup.
 - **Playwright (dev-only)** — smoke screenshots in CI using the preinstalled
   Chromium; not shipped.
+- **No linter.** The static check is `tsc --noEmit` in strict mode with
+  `noFallthroughCasesInSwitch`, `noImplicitOverride` and
+  `exactOptionalPropertyTypes` on; it gates every `pnpm build` and is the first
+  check in CI. Correctness is carried by the tests: golden streams, invariant
+  property suites with canaries for the oracle itself, and the replay played end
+  to end. What a linter would add here is mostly style, which is kept by matching
+  the surrounding code, so it would be a dependency and a config for little.
 
 Prices are integer cents (`PriceTick`), sizes integer satoshis (`Sats`). Both fit
 exactly in JS numbers (2.1e15 sats max < 2^53). No floating point in the engine —
