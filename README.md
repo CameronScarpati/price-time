@@ -121,7 +121,7 @@ final, byte-identical replays. `docs/design.md` holds every decision and its
 reasoning; `docs/brief.md` is the research it stands on.
 
 Performance, honestly: the worker packs the full ~8,700-order live book in
-1.27ms; shipped JS is about 28KB gzipped against a 150KB budget; book state
+0.873ms; shipped JS is about 28KB gzipped against a 150KB budget; book state
 coalesces to one repaint per frame while trade events are never dropped. The
 stated frame budget (p99 ≤ 16.7ms over a five-minute soak) is written for
 mid-range phones and **has not yet been measured on real phone hardware**.

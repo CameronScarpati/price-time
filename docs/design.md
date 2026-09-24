@@ -593,7 +593,7 @@ An in-page perf HUD (`?hud=1`) shows the live frame-time distribution so on-devi
 measurement is a matter of opening the page, per the performance skill.
 
 **Measured so far** (results also in the README): worker-side `packFrame` costs
-1.27ms for the full 8,768-order live book (Node bench, `test/perf/pack-bench`);
+0.873ms for the full 8,768-order live book (Node bench, `test/perf/pack-bench`);
 shipped JS is ~10KB gzip main + ~12KB worker against the 150KB budget; the live
 soak numbers are in `docs/perf/`. Frame-time percentiles from this build
 environment's software-rasterized headless Chromium are not meaningful GPU numbers

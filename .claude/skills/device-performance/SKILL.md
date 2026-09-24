@@ -38,7 +38,7 @@ heap; zero steady-state per-frame allocation.
    main-thread stalls.
 5. **Worker cost** is measurable anywhere Node runs:
    `npx vitest run test/perf/pack-bench.test.ts` — packFrame on the real
-   8.7k-order fixture book (1.27ms at last record; >4ms fails the test).
+   8.7k-order fixture book (0.873ms at last record; >4ms fails the test).
 6. **Bundle**: `pnpm build` prints gzip sizes; budget is the sum of JS.
 7. **Work not done**: `?hud=1` reports `packs/s` against the ~60 frames a
    second the renderer requests. An unchanged book costs nothing — no pack, no
