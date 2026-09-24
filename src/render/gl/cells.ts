@@ -61,10 +61,14 @@ const vec3 ASK_EMBER = vec3(0.45, 0.25, 0.10);
 
 void main() {
   float y = (uCenterTick - aTick) * uPxPerTick + uCenterYPx;
-  // Row height: a 1px breathing gap between adjacent ticks while zoomed in;
-  // at deep zoom-out rows go sub-pixel and neighbours merge into solid depth
-  // (the honest L3→L2 melt), so no fattening below ~3px/tick.
-  float rowH = uPxPerTick >= 3.0 ? max(uPxPerTick - 1.0, 2.6) : max(uPxPerTick * 0.86, 0.75);
+  // Row height: a 1px breathing gap between adjacent ticks while zoomed in.
+  // Zoomed out, a row keeps a floor of MIN_ROW_PX: on the live frame a tick
+  // is about 1.1px, and rows drawn to that pitch were hairlines too faint to
+  // read and too thin to point at. Past the floor, occupied neighbours
+  // overlap and merge into solid depth (the honest L3→L2 melt); the centre
+  // of every row still sits exactly on its price.
+  const float MIN_ROW_PX = 2.0;
+  float rowH = uPxPerTick >= 3.0 ? max(uPxPerTick - 1.0, 2.6) : max(uPxPerTick * 0.86, MIN_ROW_PX);
   // Round the row height to a whole number of DEVICE pixels. Both edges are
   // snapped to that grid below, so a height that is 12.74 device pixels
   // renders as 12 or 13 depending on where the row happens to sit — and it

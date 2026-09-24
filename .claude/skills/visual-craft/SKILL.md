@@ -122,17 +122,25 @@ move anything by as much as one device pixel.
   nor the ceiling sets the frame: a live book holds ~6,500 occupied levels
   and only 6 to 126 of them sit inside the price bound, so the 75% walk
   always stops at the bound (`packer.ts`) and the frame is 5e-5 of mid,
-  about ±320 ticks ($3.20 either side). That is ~1.1 px/tick and rows ~1 CSS
-  px (0.67 on a 3x phone whose view is 750px tall), with a median of 12-16
-  occupied levels on screen (measured 2026-09-23 by packing the 120s fixture
-  and the bundled replay).
-- Row weight is bought with the span, not with a fudge: rows are `ppt - 1`
+  about ±320 ticks ($3.20 either side). That is ~1.1 px/tick, which drew rows ~1 CSS
+  px (0.67 on a 3x phone whose view is 750px tall) until 2026-09-24, with a
+  median of 12-16 occupied levels on screen (measured 2026-09-23 by packing
+  the 120s fixture and the bundled replay).
+- Row weight is bought with the span above 3 px/tick: rows are `ppt - 1`
   px, so every tick of span you frame is height taken off every row. On the
   synthetic understudy the 8 px/tick ceiling gives ~7px rows, the answer to
   the owner's "too thin for sure" at 3px (measured in synthetic only; no
-  owner review of 7px rows is recorded). Live rows are ~1 CSS px, and how
-  heavy a live row should be is an open design question (price grouping).
-  Nothing is decided; do not retune it without the owner.
+  owner review of 7px rows is recorded). Below 3 px/tick a row keeps a floor
+  of `MIN_ROW_PX` = 2 CSS px (`cells.ts`, 2026-09-24, on the owner's "make
+  the lines a little thicker"): live rows are 2px, not the ~1px hairlines
+  that were too faint to read and too thin to point at, and occupied
+  neighbours one tick apart overlap into one band. Price grouping stays
+  unexplored. Do not retune the floor without the owner.
+- The inspector's hit test is a probe, not an exact lookup (`hitTest` in
+  `layout.ts`, `inspect` in `pipeline.ts`): rows within `HIT_SLOP_PX` (6 CSS
+  px for a cursor, 14 for a finger), nearest first, and the same slop past the
+  back of a queue. An exact row-and-order lookup on 1px rows missed most
+  pointer positions on a drawn cell.
 - Reframe deadband: a tenth of the viewport height. Measured at 45s of the
   synthetic understudy, that is about one designed move per axis per 45s and
   ~96% of frames writing nothing at all. If a change makes that number worse,

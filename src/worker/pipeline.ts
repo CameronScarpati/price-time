@@ -563,17 +563,38 @@ export class Pipeline {
     }
   }
 
-  inspect(side: Side, tick: number, cumSats: number): InspectionResult | null {
-    const book = this.engine.sideBook(side);
-    const level = book.levels.get(tick);
-    if (level === undefined) return null;
+  /**
+   * The order drawn nearest the pointer: rows are searched outward from
+   * `tick`, nearest first, and in a row the order whose queue span holds
+   * `cumSats` wins; past the back of the queue, within `satsSlop`, the last
+   * order does (the renderer draws the shortest cells longer than their size,
+   * so the visible end of a queue can sit a pixel or two past its total).
+   */
+  inspect(
+    sides: readonly Side[], tick: number, tickRadius: number, cumSats: number, satsSlop: number,
+  ): InspectionResult | null {
+    for (let d = 0; d <= tickRadius; d++) {
+      for (const t of d === 0 ? [tick] : [tick - d, tick + d]) {
+        for (const side of sides) {
+          const found = this.inspectLevel(side, t, cumSats, satsSlop);
+          if (found !== null) return found;
+        }
+      }
+    }
+    return null;
+  }
+
+  private inspectLevel(side: Side, tick: number, cumSats: number, satsSlop: number): InspectionResult | null {
+    const level = this.engine.sideBook(side).levels.get(tick);
+    if (level === undefined || cumSats > level.totalSats + satsSlop) return null;
+    const store = this.engine.store;
     let cum = 0;
     let position = 0;
-    for (let slot = level.head; slot !== NIL; slot = this.engine.store.next[slot]) {
-      const sats = this.engine.store.sats[slot];
+    for (let slot = level.head; slot !== NIL; slot = store.next[slot]) {
+      const sats = store.sats[slot];
       position++;
-      if (cumSats < cum + sats) {
-        const id = this.engine.store.id[slot];
+      if (cumSats < cum + sats || store.next[slot] === NIL) {
+        const id = store.id[slot];
         const at = this.restedAtMs.get(id);
         return {
           id, side, tick, sats,
@@ -581,7 +602,7 @@ export class Pipeline {
           queuePosition: position,
           queueLength: level.count,
           ageSec: at === undefined ? 0 : (Date.now() - at) / 1000,
-          liquidation: (this.engine.store.flags[slot] & 1) !== 0,
+          liquidation: (store.flags[slot] & 1) !== 0,
         };
       }
       cum += sats;

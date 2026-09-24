@@ -1,3 +1,4 @@
+import { HIT_SLOP_PX } from "./render/layout";
 import { Renderer } from "./render/renderer";
 import { Ui } from "./ui/ui";
 import type { MainToWorker } from "./worker/protocol";
@@ -118,7 +119,7 @@ function boot(): void {
       }
       lastTapMs = now;
     }
-    ui.inspectAt(e.clientX, e.clientY);
+    ui.inspectAt(e.clientX, e.clientY, e.pointerType === "touch" ? HIT_SLOP_PX.touch : HIT_SLOP_PX.mouse);
   });
   window.addEventListener("dblclick", () => renderer.camera.recenter());
   window.addEventListener("pointermove", (e) => {

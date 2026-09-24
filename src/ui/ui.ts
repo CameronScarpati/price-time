@@ -1,6 +1,6 @@
 import { Side } from "../engine/types";
 import { formatDecimal } from "../sources/bitstamp/decimal";
-import { hitTest } from "../render/layout";
+import { HIT_SLOP_PX, hitTest } from "../render/layout";
 import type { Renderer } from "../render/renderer";
 import type { FrameMeta, InspectionResult, MainToWorker, WorkerToMain } from "../worker/protocol";
 
@@ -305,9 +305,9 @@ export class Ui {
 
   // -------------------------------------------------------------- inspector
 
-  inspectAt(clientX: number, clientY: number): void {
+  inspectAt(clientX: number, clientY: number, slopPx: number = HIT_SLOP_PX.mouse): void {
     const r = this.renderer();
-    const hit = hitTest(clientX, clientY, r.layoutParams, r.bestBid, r.bestAsk);
+    const hit = hitTest(clientX, clientY, r.layoutParams, r.bestBid, r.bestAsk, slopPx);
     if (hit === null) {
       // Bump the token so an in-flight reply can't resurrect the box after
       // the pointer has already left the field.
@@ -320,7 +320,10 @@ export class Ui {
     // old order back under the pointer.
     this.watchedId = null;
     const token = ++this.inspectToken;
-    this.post({ type: "inspect", token, side: hit.side, tick: hit.tick, cumSats: Math.round(hit.cumSats) });
+    this.post({
+      type: "inspect", token, sides: hit.sides, tick: hit.tick, tickRadius: hit.tickRadius,
+      cumSats: Math.round(hit.cumSats), satsSlop: Math.round(hit.satsSlop),
+    });
     this.inspector.style.left = `${Math.min(clientX + 14, innerWidth - 260)}px`;
     this.inspector.style.top = `${Math.min(clientY + 14, innerHeight - 90)}px`;
   }

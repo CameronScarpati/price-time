@@ -72,22 +72,49 @@ export function yToTick(y: number, p: LayoutParams): number {
   return Math.round(p.centerTick - (y - p.viewH * (p.centerYFrac ?? 0.5)) / p.pxPerTick);
 }
 
+/**
+ * How far a pointer may land from a drawn cell and still pick it, in CSS px.
+ * On the live frame a row is about one pixel tall, so a lookup that asked for
+ * the exact row and the exact order under the pointer opened the inspector
+ * on almost nothing a viewer aimed at. A finger covers more than a cursor.
+ */
+export const HIT_SLOP_PX = { mouse: 6, touch: 14 } as const;
+
+/** What the worker searches for the order under the pointer: the rows on
+ * `sides` within `tickRadius` of `tick`, nearest first, and in a row the
+ * order whose queue span holds `cumSats`, allowing `satsSlop` past the end
+ * of the queue (where the shortest cells are drawn longer than their size). */
+export interface HitProbe {
+  sides: Side[];
+  tick: number;
+  tickRadius: number;
+  cumSats: number;
+  satsSlop: number;
+}
+
 export function hitTest(
   x: number, y: number, p: LayoutParams, bestBid: number, bestAsk: number,
-): { side: Side; tick: number; cumSats: number } | null {
+  slopPx: number = HIT_SLOP_PX.mouse,
+): HitProbe | null {
   const tick = yToTick(y, p);
   if (tick <= 0) return null;
+  const tickRadius = Math.floor(slopPx / p.pxPerTick);
+  const satsSlop = slopPx / p.pxPerSat;
   if (p.layout === 0) {
-    const side = x < p.seamX ? Side.Bid : Side.Ask;
     // The seam separates the sides spatially; price confirms it. A bid can
-    // only rest at or below the best bid's neighborhood — clicks in the
-    // empty quadrants resolve to nothing.
-    const cumSats = Math.abs(x - p.seamX) / p.pxPerSat;
-    if (side === Side.Bid && tick > bestBid) return null;
-    if (side === Side.Ask && tick < bestAsk) return null;
-    return { side, tick, cumSats };
+    // only rest at or below the best bid — the empty quadrants resolve to
+    // nothing unless a row sits within reach.
+    const side = x < p.seamX ? Side.Bid : Side.Ask;
+    if (side === Side.Bid && tick > bestBid + tickRadius) return null;
+    if (side === Side.Ask && tick < bestAsk - tickRadius) return null;
+    return { sides: [side], tick, tickRadius, cumSats: Math.abs(x - p.seamX) / p.pxPerSat, satsSlop };
   }
-  const side = tick <= bestBid ? Side.Bid : tick >= bestAsk ? Side.Ask : null;
-  if (side === null || x < p.seamX) return null;
-  return { side, tick, cumSats: (x - p.seamX) / p.pxPerSat };
+  if (x < p.seamX - slopPx) return null;
+  // The spine stacks both sides in one column; near the spread either may
+  // be the nearer row, so both are searched.
+  const sides: Side[] = [];
+  if (tick - tickRadius <= bestBid) sides.push(Side.Bid);
+  if (tick + tickRadius >= bestAsk) sides.push(Side.Ask);
+  if (sides.length === 0) return null;
+  return { sides, tick, tickRadius, cumSats: Math.max(x - p.seamX, 0) / p.pxPerSat, satsSlop };
 }

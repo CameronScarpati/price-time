@@ -382,8 +382,21 @@ levels and only 6 to 126 of them sit within 5e-5 of mid, so the 75% walk in
 phone whose view is 750px tall), and a median of 12 to 16 occupied levels on
 screen (measured 2026-09-23 by packing the 120s test fixture and the bundled
 replay session).
-How heavy a live row should be is an open design question (price grouping). It
-is not decided here, and the ~7px figure above says nothing about live.
+Rows drawn to that pitch were hairlines: too faint to read, and a one-pixel
+target the inspector almost never found under the pointer. Since 2026-09-24 a
+zoomed-out row keeps a 2 CSS px floor (`MIN_ROW_PX` in `cells.ts`), so live
+rows are 2px and occupied neighbours one tick apart overlap into one band; each
+row's centre still sits on its price. Price grouping stays unexplored, and the
+~7px figure above says nothing about live.
+
+The inspector does not demand a direct hit either. `hitTest` (`layout.ts`)
+sends the worker a probe: the rows within 6 CSS px of the pointer (14 for a
+finger), searched nearest first, and in a row the order whose queue span holds
+the pointer, with the same slop past the back of the queue. On the bundled
+replay, the old exact lookup opened the inspector for 56% of pointer positions
+on a drawn cell and 12% of those within 3px of one at 1440x860 (56% and 4% on a
+390x844 3x phone); the probe opens it for all of both, at both sizes (measured
+headlessly, 2026-09-24).
 
 Stillness is then the default state, not a resting point something approaches.
 **The camera never moves on its own** — and now it very nearly never moves at
