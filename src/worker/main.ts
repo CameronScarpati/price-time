@@ -39,7 +39,7 @@ onmessage = (e: MessageEvent<MainToWorker>) => {
         post({
           type: "inspection",
           token: msg.token,
-          result: pipeline.inspect(msg.sides, msg.tick, msg.tickRadius, msg.cumSats, msg.satsSlop),
+          result: pipeline.inspect(msg.sides, msg.tickAt, msg.reachTicks, msg.cumSats, msg.satsSlop),
         });
         break;
       case "watch":

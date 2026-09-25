@@ -23,12 +23,17 @@ import type { SourceKind } from "../sources/source";
  *                       between market events, which is what lets the worker
  *                       skip the pack and the renderer skip the upload.
  *       +5  flags       bit0 liquidation
- *
- * f32 holds ticks near the BTC/USD mid exactly (< 2^24); the far tail loses
- * cent precision only where a cent is far below one pixel.
+ *       +6  tickLo      tick - fround(tick): the part of the price float32
+ *                       drops. +0 holds fround(tick), which is the exact tick
+ *                       only below 2^24 ($167,772.16). Past that +0 alone is
+ *                       off by up to half its float32 spacing: 128 ticks at
+ *                       $21M, 2,048 at the $484M asks a real book rests. The
+ *                       shader subtracts the two halves separately (cells.ts),
+ *                       so a row a viewer pans out to is drawn at its price.
+ *                       0 for every order near the BTC/USD mid.
  */
 export const FRAME_HEADER_FLOATS = 16;
-export const FRAME_STRIDE = 6;
+export const FRAME_STRIDE = 7;
 export const FRAME_MAX_INSTANCES = 32_768;
 export const FRAME_BYTES =
   (FRAME_HEADER_FLOATS + FRAME_MAX_INSTANCES * FRAME_STRIDE) * 4;
@@ -57,6 +62,11 @@ export const Header = {
    * wander a little past the last order, never into the void beyond. */
   LoTick: 9,
   HiTick: 10,
+  /** The float32 remainders of LoTick and HiTick (value - fround(value)), as
+   * for an instance's tickLo: the camera clamps to the exact extent, and the
+   * farthest real ask is two thousand ticks past its float32 rounding. */
+  LoTickLo: 12,
+  HiTickLo: 13,
   /** Which book state this buffer holds. The worker stamps it; on the next
    * request it compares the stamp against the live book and re-packs only if
    * they differ, so a buffer that is still correct is returned untouched.
@@ -144,8 +154,8 @@ export type MainToWorker =
   | { type: "hidden"; hidden: boolean }
   /** Find the order drawn nearest the pointer (render/layout.ts HitProbe). */
   | {
-    type: "inspect"; token: number; sides: Side[]; tick: PriceTick;
-    tickRadius: number; cumSats: Sats; satsSlop: Sats;
+    type: "inspect"; token: number; sides: Side[]; tickAt: number;
+    reachTicks: number; cumSats: Sats; satsSlop: Sats;
   }
   /** Re-resolve a previously inspected order by id. A null reply means it
    * left the book (filled or cancelled) — the inspector's cue to close. */

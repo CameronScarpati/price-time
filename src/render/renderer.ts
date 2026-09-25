@@ -5,7 +5,7 @@ import {
 import { Camera } from "./camera";
 import { CellPipeline } from "./gl/cells";
 import { PostPipeline } from "./gl/post";
-import { snapCenterToDeviceGrid, type LayoutParams } from "./layout";
+import { BAND_PX, snapCenterToDeviceGrid, type LayoutParams } from "./layout";
 import { Overlay } from "./overlay";
 
 /**
@@ -230,7 +230,9 @@ export class Renderer {
     // legibility can never argue the frame narrower than the book.
     const spreadTicks = f32[Header.SpreadTicks];
     this.camera.follow(mid, f32[Header.SpanHintTicks], spreadTicks, cssH, BIRDS_EYE);
-    this.camera.setBounds(f32[Header.LoTick], f32[Header.HiTick]);
+    this.camera.setBounds(
+      f32[Header.LoTick] + f32[Header.LoTickLo], f32[Header.HiTick] + f32[Header.HiTickLo],
+    );
     this.camera.update(dtMs, nowMs, reduced);
 
     // Length scale (scale is presentation — a lens on real sizes). Desktop:
@@ -305,8 +307,8 @@ export class Renderer {
       centerYPx: cssH * (p.centerYFrac ?? 0.5),
       dpr: this.dpr,
       nowSec: frame.meta.nowSec,
-      bandTopPx: p.layout === 1 ? 18 : 22,
-      bandBottomPx: p.layout === 1 ? 58 : 46,
+      bandTopPx: BAND_PX[p.layout].top,
+      bandBottomPx: BAND_PX[p.layout].bottom,
     }, fresh);
 
     this.overlay.draw(p, this.bestBid, this.bestAsk, 2, this.delegate.chromeAlpha());
@@ -356,8 +358,8 @@ export class Renderer {
     const count = f.f32[Header.InstanceCount];
     const sample: number[][] = [];
     for (let i = 0; i < Math.min(count, 8); i++) {
-      const base = 16 + i * 6;
-      sample.push([...f.f32.slice(base, base + 6)]);
+      const base = FRAME_HEADER_FLOATS + i * FRAME_STRIDE;
+      sample.push([...f.f32.slice(base, base + FRAME_STRIDE)]);
     }
     return { header, sample };
   }

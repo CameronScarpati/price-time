@@ -57,6 +57,9 @@ export function packFrame(
         f32[write + 3] = side;
         f32[write + 4] = restedAtSecOf(slot);
         f32[write + 5] = (store.flags[slot] & FLAG_LIQUIDATION) !== 0 ? 1 : 0;
+        // What float32 drops from the tick: an integer no larger than half
+        // the float32 spacing, which float32 holds exactly.
+        f32[write + 6] = store.tick[slot] - Math.fround(store.tick[slot]);
         write += FRAME_STRIDE;
         instances++;
         cumBefore += store.sats[slot];
@@ -86,6 +89,8 @@ export function packFrame(
   const hiTick = highs.length > 0 ? Math.max(...highs) : 0;
   f32[Header.LoTick] = loTick;
   f32[Header.HiTick] = hiTick;
+  f32[Header.LoTickLo] = loTick - Math.fround(loTick);
+  f32[Header.HiTickLo] = hiTick - Math.fround(hiTick);
 
   // Camera span hint: a BIRD'S EYE — the frame holds the BODY of the book,
   // and holds the same amount of it from one minute to the next. A

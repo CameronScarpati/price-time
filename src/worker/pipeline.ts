@@ -565,16 +565,23 @@ export class Pipeline {
 
   /**
    * The order drawn nearest the pointer: rows are searched outward from
-   * `tick`, nearest first, and in a row the order whose queue span holds
+   * `tickAt`, the fractional tick under the pointer, nearest first and no
+   * farther than `reachTicks`, and in a row the order whose queue span holds
    * `cumSats` wins; past the back of the queue, within `satsSlop`, the last
    * order does (the renderer draws the shortest cells longer than their size,
    * so the visible end of a queue can sit a pixel or two past its total).
    */
   inspect(
-    sides: readonly Side[], tick: number, tickRadius: number, cumSats: number, satsSlop: number,
+    sides: readonly Side[], tickAt: number, reachTicks: number, cumSats: number, satsSlop: number,
   ): InspectionResult | null {
-    for (let d = 0; d <= tickRadius; d++) {
-      for (const t of d === 0 ? [tick] : [tick - d, tick + d]) {
+    const near = Math.round(tickAt);
+    // |near - tickAt| <= 0.5, so taking the nearer of each pair first keeps
+    // the whole walk in order of distance.
+    const below = tickAt < near;
+    for (let d = 0; d <= Math.ceil(reachTicks) + 1; d++) {
+      for (let k = 0; k < (d === 0 ? 1 : 2); k++) {
+        const t = d === 0 ? near : (k === 0) === below ? near - d : near + d;
+        if (Math.abs(t - tickAt) > reachTicks) continue;
         for (const side of sides) {
           const found = this.inspectLevel(side, t, cumSats, satsSlop);
           if (found !== null) return found;

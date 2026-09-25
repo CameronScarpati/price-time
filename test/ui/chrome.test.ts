@@ -326,7 +326,7 @@ describe("Ui inspector", () => {
     // and bring the bid back.
     ui.inspectAt(410, 392);
     const ask = lastAsk();
-    expect(ask).toMatchObject({ sides: [Side.Ask], tick: 1001 });
+    expect(ask).toMatchObject({ sides: [Side.Ask], tickAt: 1001 });
     clock = 1000;
     ui.onMeta(meta(null));
     reply(ask.token, order(2, Side.Ask, 1001));

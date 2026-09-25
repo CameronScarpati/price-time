@@ -52,14 +52,32 @@ describe("inspector probe (worker)", () => {
     }
   });
 
-  it("finds the nearest row within the tick radius, and nothing beyond it", () => {
+  it("finds the nearest row within reach, and nothing beyond it", () => {
     const { p, engine } = started();
     const best = engine.bids.bestTick()!;
     const front = queue(engine, Side.Bid, best)[0]!;
     // No bid rests above the best bid, so three ticks up is empty space
     // three rows from the nearest bid.
     expect(p.inspect([Side.Bid], best + 3, 3, 0, 0)?.id).toBe(front.id);
-    expect(p.inspect([Side.Bid], best + 3, 2, 0, 0)).toBeNull();
+    expect(p.inspect([Side.Bid], best + 3, 2.9, 0, 0)).toBeNull();
+    // Reach is measured from the pointer's fractional tick, not a rounded one.
+    expect(p.inspect([Side.Bid], best + 0.6, 0.6, 0, 0)?.id).toBe(front.id);
+    expect(p.inspect([Side.Bid], best + 0.6, 0.55, 0, 0)).toBeNull();
+  });
+
+  it("takes the nearer of two rows first", () => {
+    const { p, engine } = started();
+    const ticks = engine.bids.ticks;
+    // Two occupied bid levels with a gap: a pointer a little nearer either
+    // one must name that one.
+    let i = ticks.length - 1;
+    while (i > 0 && ticks[i] - ticks[i - 1] < 2) i--;
+    const hi = ticks[i];
+    const lo = ticks[i - 1];
+    const mid = (hi + lo) / 2;
+    const reach = hi - lo;
+    expect(p.inspect([Side.Bid], mid + 0.2, reach, 0, 0)?.tick).toBe(hi);
+    expect(p.inspect([Side.Bid], mid - 0.2, reach, 0, 0)?.tick).toBe(lo);
   });
 
   it("takes the back of the queue within the slop past its end", () => {
@@ -79,13 +97,42 @@ describe("inspector probe (layout)", () => {
     seamX: 720, layout: 0, centerYFrac: 0.5,
   };
 
-  it("sizes the tick radius and the queue slop from the pixel slop", () => {
+  it("sizes the reach and the queue slop from the pixel slop", () => {
     const hit = hitTest(700, 430, seam, 999, 1001, 6)!;
     expect(hit.sides).toEqual([Side.Bid]);
-    expect(hit.tick).toBe(1000);
-    expect(hit.tickRadius).toBe(5);
+    expect(hit.tickAt).toBe(1000);
+    // Half a 2px row, half a pixel of device snapping, and the slop.
+    expect(hit.reachTicks).toBeCloseTo((1 + 0.5 + 6) / 1.1);
     expect(hit.satsSlop).toBeCloseTo(6 / 1e-5);
-    expect(hitTest(700, 430, seam, 999, 1001, 14)!.tickRadius).toBe(12);
+    expect(hitTest(700, 430, seam, 999, 1001, 14)!.reachTicks).toBeCloseTo((1 + 0.5 + 14) / 1.1);
+  });
+
+  it("keeps the slop when zoomed in, where a row is many pixels tall", () => {
+    // At 20 px/tick a row is 19px tall: a pointer 12px from a row's centre
+    // is 2.5px past its edge and must still reach it.
+    const close = { ...seam, pxPerTick: 20 };
+    const hit = hitTest(700, 430 - 12, close, 1001, 1002, 6)!;
+    expect(hit.tickAt).toBeCloseTo(1000.6);
+    expect(Math.abs(1000 - hit.tickAt)).toBeLessThanOrEqual(hit.reachTicks);
+    // ... and 17px away (7.5px past the edge) it must not.
+    const far = hitTest(700, 430 - 17, close, 1001, 1002, 6)!;
+    expect(Math.abs(1000 - far.tickAt)).toBeGreaterThan(far.reachTicks);
+  });
+
+  it("does not answer inside the bottom band, where rows are not drawn", () => {
+    expect(hitTest(700, 860 - 47, seam, 1200, 1201, 6)).not.toBeNull();
+    expect(hitTest(700, 860 - 46, seam, 1200, 1201, 6)).toBeNull();
+    const spine: LayoutParams = { ...seam, viewW: 390, viewH: 844, seamX: 10, layout: 1 };
+    expect(hitTest(100, 844 - 58, spine, 1200, 1201, 6)).toBeNull();
+  });
+
+  it("probes in float64 at any price", () => {
+    // The farthest ask in the bundled replay: float32 is 4,096 ticks coarse
+    // there, and the probe must still name the tick under the pointer.
+    const far = { ...seam, centerTick: 48_398_000_128 };
+    const hit = hitTest(800, 430 - 11, far, 6_393_899, 6_393_900, 6)!;
+    expect(hit.sides).toEqual([Side.Ask]);
+    expect(hit.tickAt).toBeCloseTo(48_398_000_138, 6);
   });
 
   it("keeps the empty quadrants empty past the slop", () => {

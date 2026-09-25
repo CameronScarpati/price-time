@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Pipeline, packedRestedAtSec } from "../../src/worker/pipeline";
-import { FRAME_BYTES, Header } from "../../src/worker/protocol";
+import { FRAME_BYTES, FRAME_HEADER_FLOATS, FRAME_STRIDE, Header } from "../../src/worker/protocol";
 
 /**
  * The pipeline hands a requested buffer back untouched when the book it was
@@ -78,7 +78,7 @@ describe("unchanged-book frame skip", () => {
     const count = f32[Header.InstanceCount];
     expect(count).toBeGreaterThan(0);
     for (let i = 0; i < count; i++) {
-      const age = meta.nowSec - f32[16 + i * 6 + 4];
+      const age = meta.nowSec - f32[FRAME_HEADER_FLOATS + i * FRAME_STRIDE + 4];
       expect(age).toBeGreaterThanOrEqual(0);
       expect(age).toBeLessThan(3600);
     }

@@ -23,9 +23,11 @@ layout(location=3) in float aSats;
 layout(location=4) in float aSide;
 layout(location=5) in float aRestedAtSec;
 layout(location=6) in float aFlags;
+layout(location=7) in float aTickLo;   // tick - fround(tick), see protocol.ts
 
 uniform vec2 uViewPx;
-uniform float uCenterTick;
+uniform float uCenterTick;   // fround of the whole centre tick
+uniform float uCenterTickLo; // the rest of it; see splitCenterForGpu
 uniform float uPxPerTick;
 uniform float uPxPerSat;
 uniform float uSeamX;
@@ -60,7 +62,9 @@ const vec3 BID_EMBER = vec3(0.10, 0.24, 0.42);
 const vec3 ASK_EMBER = vec3(0.45, 0.25, 0.10);
 
 void main() {
-  float y = (uCenterTick - aTick) * uPxPerTick + uCenterYPx;
+  // Hi from hi and lo from lo, then the sum: each difference is exact, where
+  // a single float32 tick is exact only below 2^24 (see splitCenterForGpu).
+  float y = ((uCenterTick - aTick) + (uCenterTickLo - aTickLo)) * uPxPerTick + uCenterYPx;
   // Row height: a 1px breathing gap between adjacent ticks while zoomed in.
   // Zoomed out, a row keeps a floor of MIN_ROW_PX: on the live frame a tick
   // is about 1.1px, and rows drawn to that pitch were hairlines too faint to
@@ -239,7 +243,7 @@ export class CellPipeline {
     for (const name of [
       "uViewPx", "uCenterTick", "uPxPerTick", "uPxPerSat", "uSeamX",
       "uLayout", "uMinCellPx", "uMaxCellPx", "uDim", "uReduced",
-      "uCenterYPx", "uDpr", "uBandPx", "uViewHPx", "uNowSec",
+      "uCenterYPx", "uDpr", "uBandPx", "uViewHPx", "uNowSec", "uCenterTickLo",
     ]) {
       this.uniforms[name] = gl.getUniformLocation(this.program, name)!;
     }
@@ -268,10 +272,12 @@ export class CellPipeline {
       gl.vertexAttribPointer(1 + i, 1, gl.FLOAT, false, strideBytes, FRAME_HEADER_FLOATS * 4 + i * 4);
     }
     gl.uniform2f(this.uniforms.uViewPx, u.viewW, u.viewH);
-    // Whole tick + folded remainder: the raw centre would be rounded to half
-    // a tick on its way into a float32 uniform. See splitCenterForGpu.
+    // Whole tick (as hi + lo) + folded remainder: the raw centre would be
+    // rounded to half a tick, or to thousands of ticks at the far asks, on its
+    // way into a float32 uniform. See splitCenterForGpu.
     const center = splitCenterForGpu(u.centerTick, u.pxPerTick, u.centerYPx);
-    gl.uniform1f(this.uniforms.uCenterTick, center.tick);
+    gl.uniform1f(this.uniforms.uCenterTick, center.hi);
+    gl.uniform1f(this.uniforms.uCenterTickLo, center.lo);
     gl.uniform1f(this.uniforms.uPxPerTick, u.pxPerTick);
     gl.uniform1f(this.uniforms.uPxPerSat, u.pxPerSat);
     gl.uniform1f(this.uniforms.uSeamX, u.seamX);

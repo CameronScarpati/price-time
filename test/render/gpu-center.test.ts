@@ -107,3 +107,44 @@ describe("float32 standpoint split", () => {
     }
   });
 });
+
+describe("float32 standpoint split at far prices", () => {
+  /** cells.ts's y with the hi/lo split: hi from hi, lo from lo, then the sum. */
+  function splitShaderY(tick: number, centerTick: number, ppt: number, centerYPx: number): number {
+    const c = splitCenterForGpu(centerTick, ppt, centerYPx);
+    const aHi = f(tick);
+    const aLo = f(tick - aHi);
+    const dTick = f(f(f(c.hi) - aHi) + f(f(c.lo) - aLo));
+    return f(f(dTick * f(ppt)) + f(c.yPx));
+  }
+
+  it("sends a centre whose hi and lo are float32 values summing to the whole tick", () => {
+    for (const center of [6_393_899.4, 16_777_217.3, 100_000_065.6, 2_100_000_000.2, 48_398_000_128.7]) {
+      const c = splitCenterForGpu(center, 1.1, VIEW_H / 2);
+      expect(f(c.hi)).toBe(c.hi);
+      expect(f(c.lo)).toBe(c.lo);
+      expect(c.hi + c.lo).toBe(c.tick);
+    }
+  });
+
+  it("draws rows within 1e-3 px of the float64 layout out to the farthest ask", () => {
+    for (const base of [16_777_216, 33_554_431, 100_000_000, 2_100_000_000, 48_398_000_128]) {
+      for (const ppt of [1.1029, 8, 64]) {
+        let worstSplit = 0;
+        let worstOld = 0;
+        for (const center of pan(base, ppt, 2)) {
+          const p = params(center, ppt);
+          for (let k = -40; k <= 40; k++) {
+            const tick = base + k;
+            const want = tickToY(tick, p);
+            worstSplit = Math.max(worstSplit, Math.abs(splitShaderY(tick, center, ppt, VIEW_H / 2) - want));
+            worstOld = Math.max(worstOld, Math.abs(shaderY(tick, center, ppt, VIEW_H / 2) - want));
+          }
+        }
+        expect(worstSplit).toBeLessThan(1e-3);
+        // The single-float path this replaces is whole ticks off out here.
+        if (base >= 100_000_000) expect(worstOld).toBeGreaterThan(ppt);
+      }
+    }
+  });
+});

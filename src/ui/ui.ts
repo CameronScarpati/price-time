@@ -274,6 +274,8 @@ export class Ui {
       window.addEventListener(type, () => this.engage(), { passive: true });
     }
     window.addEventListener("focusin", () => this.engage());
+    // A resize moves the tape's fit: rebuild it on the next frame.
+    window.addEventListener("resize", () => { this.lastTapeStamp = -1; });
   }
 
   /** Words and panels only — travel keys (arrows, PageUp/Down, Home) live
@@ -321,7 +323,7 @@ export class Ui {
     this.watchedId = null;
     const token = ++this.inspectToken;
     this.post({
-      type: "inspect", token, sides: hit.sides, tick: hit.tick, tickRadius: hit.tickRadius,
+      type: "inspect", token, sides: hit.sides, tickAt: hit.tickAt, reachTicks: hit.reachTicks,
       cumSats: Math.round(hit.cumSats), satsSlop: Math.round(hit.satsSlop),
     });
     this.inspector.style.left = `${Math.min(clientX + 14, innerWidth - 260)}px`;
@@ -377,6 +379,17 @@ export class Ui {
       // Fixed-width on purpose: trailing zeros are exact (sats are integers),
       // and a right-flush mono column must not jog row to row.
       el("span", "inspector-dim", row, `${formatDecimal(t.sats, 8)} BTC`);
+    }
+    // Keep only the rows that fit whole. The list clips at its max-height,
+    // and a row cut through there, or faded out, reads as a fault. Rows are
+    // positioned against the list (style.css), so one layout read covers all.
+    if (meta.tape.length > 0) {
+      const fit = this.tapeList.clientHeight;
+      let last = this.tapeList.lastElementChild as HTMLElement | null;
+      while (last !== null && last.offsetTop + last.offsetHeight > fit) {
+        last.remove();
+        last = this.tapeList.lastElementChild as HTMLElement | null;
+      }
     }
   }
 

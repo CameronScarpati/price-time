@@ -94,21 +94,49 @@ describe("packFrame content", () => {
     packFrame(engine, buffer, () => 7);
     const f32 = new Float32Array(buffer);
 
-    // [tick, cumBefore, sats, side, restedAtSec, flags] per instance. Bids pack
-    // first from the touch outward, then asks; within a level, queue order.
+    // [tick, cumBefore, sats, side, restedAtSec, flags, tickLo] per instance.
+    // Bids pack first from the touch outward, then asks; within a level,
+    // queue order. tickLo is 0 anywhere near a real mid (below 2^24).
     const expected = [
-      [6_503_790, 0, 100, Side.Bid, 7, 0],
-      [6_503_790, 100, 250, Side.Bid, 7, 0],
-      [6_503_780, 0, 500, Side.Bid, 7, 0],
-      [6_503_800, 0, 300, Side.Ask, 7, 0],
-      [6_503_800, 300, 50, Side.Ask, 7, 0],
-      [6_503_820, 0, 1000, Side.Ask, 7, 0],
+      [6_503_790, 0, 100, Side.Bid, 7, 0, 0],
+      [6_503_790, 100, 250, Side.Bid, 7, 0, 0],
+      [6_503_780, 0, 500, Side.Bid, 7, 0, 0],
+      [6_503_800, 0, 300, Side.Ask, 7, 0, 0],
+      [6_503_800, 300, 50, Side.Ask, 7, 0, 0],
+      [6_503_820, 0, 1000, Side.Ask, 7, 0, 0],
     ];
     const actual = expected.map((_, i) => {
       const at = FRAME_HEADER_FLOATS + i * FRAME_STRIDE;
       return Array.from(f32.slice(at, at + FRAME_STRIDE));
     });
     expect(actual).toEqual(expected);
+  });
+
+  it("carries a far price exactly, as float32 hi plus float32 lo", () => {
+    // The bundled replay rests asks near $484M, where float32 is 4,096 ticks
+    // coarse: a tick there alone would be drawn thousands of pixels from its
+    // price, and the pan clamp would stop short of the farthest one.
+    const farTick = 48_398_001_234;
+    const oddTick = 2_100_000_001;
+    const far = seededEngine([
+      ...BOOK,
+      { id: 7, side: Side.Ask, tick: farTick, sats: 1, micro: 16 },
+      { id: 8, side: Side.Ask, tick: oddTick, sats: 1, micro: 17 },
+    ]);
+    const buffer = new ArrayBuffer(FRAME_BYTES);
+    const { instances } = packFrame(far, buffer, () => 0);
+    const f32 = new Float32Array(buffer);
+    const ticks: number[] = [];
+    for (let i = 0; i < instances; i++) {
+      const at = FRAME_HEADER_FLOATS + i * FRAME_STRIDE;
+      ticks.push(f32[at] + f32[at + 6]);
+      expect(Math.abs(f32[at + 6])).toBeLessThan(4_096);
+    }
+    expect(ticks).toContain(farTick);
+    expect(ticks).toContain(oddTick);
+    expect(f32[Header.HiTick]).not.toBe(farTick);
+    expect(f32[Header.HiTick] + f32[Header.HiTickLo]).toBe(farTick);
+    expect(f32[Header.LoTick] + f32[Header.LoTickLo]).toBe(6_503_780);
   });
 
   it("zeroes the touch fields on an empty book", () => {
