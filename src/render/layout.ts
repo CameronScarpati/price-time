@@ -19,6 +19,8 @@ export interface LayoutParams {
    * spine lifts it to the portrait optical center (provenance + safe area
    * occupy the bottom). Must stay in lockstep with cells.ts's uCenterYPx. */
   centerYFrac?: number;
+  /** Device pixels per CSS px, which cells.ts snaps every row edge to. */
+  dpr?: number;
 }
 
 /**
@@ -93,6 +95,17 @@ export function rowHalfPx(pxPerTick: number): number {
   return rowH / 2;
 }
 
+/** The top and bottom edge, in CSS px, of the row cells.ts draws centred at
+ * `y`: the height rounded to whole device pixels, then both edges snapped to
+ * the device grid, never zero tall. */
+export function drawnRowSpan(y: number, pxPerTick: number, dpr: number): { top: number; bottom: number } {
+  const rowH = Math.max(Math.floor(rowHalfPx(pxPerTick) * 2 * dpr + 0.5), 1) / dpr;
+  const top = Math.floor((y - rowH * 0.5) * dpr + 0.5) / dpr;
+  let bottom = Math.floor((y + rowH * 0.5) * dpr + 0.5) / dpr;
+  if (bottom === top) bottom = top + 1 / dpr;
+  return { top, bottom };
+}
+
 export function tickToY(tick: number, p: LayoutParams): number {
   return (p.centerTick - tick) * p.pxPerTick + p.viewH * (p.centerYFrac ?? 0.5);
 }
@@ -142,8 +155,7 @@ export function hitTest(
   // Only rows with a visible pixel answer: a row wholly inside the bottom
   // band, where cells are transparent, or wholly above the top of the view,
   // is out of reach however near the pointer. Prices start at one tick.
-  const tickMin = Math.max(1, p.centerTick - (bandTop + edgePx - centerY) / p.pxPerTick);
-  const tickMax = p.centerTick + (centerY + edgePx) / p.pxPerTick;
+  const { tickMin, tickMax } = visibleTicks(p, bandTop, centerY);
   if (tickAt + reachTicks < tickMin || tickAt - reachTicks > tickMax) return null;
   const satsSlop = slopPx / p.pxPerSat;
   if (p.layout === 0) {
@@ -169,4 +181,28 @@ export function hitTest(
     sides, tickAt, reachTicks, tickMin, tickMax,
     cumSats: Math.max(x - p.seamX, 0) / p.pxPerSat, satsSlop,
   };
+}
+
+/**
+ * The lowest and highest tick whose drawn row has a pixel on screen above
+ * the bottom band, found against the same snapped geometry cells.ts draws.
+ * A fragment is shaded at its pixel's centre, so a row reaches into view
+ * when its bottom edge is below y = 0 and shows above the band when its
+ * first pixel centre is above `bandTop`, where the band's alpha reaches 0.
+ */
+function visibleTicks(
+  p: LayoutParams, bandTop: number, centerY: number,
+): { tickMin: number; tickMax: number } {
+  const dpr = p.dpr ?? 1;
+  const ppt = p.pxPerTick;
+  const y = (t: number): number => (p.centerTick - t) * ppt + centerY;
+  // Start a pixel outside any row that could qualify, then step inward to
+  // the first that does. The step count is a pixel's worth of ticks, at
+  // most about 1,250 at the widest zoom.
+  const outPx = rowHalfPx(ppt) + 1;
+  let tickMax = Math.ceil(p.centerTick + (centerY + outPx) / ppt);
+  while (drawnRowSpan(y(tickMax), ppt, dpr).bottom <= 0) tickMax--;
+  let tickMin = Math.floor(p.centerTick - (bandTop + outPx - centerY) / ppt);
+  while (drawnRowSpan(y(tickMin), ppt, dpr).top + 0.5 / dpr >= bandTop) tickMin++;
+  return { tickMin: Math.max(1, tickMin), tickMax };
 }

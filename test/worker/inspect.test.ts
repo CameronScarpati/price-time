@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { NIL } from "../../src/engine/store";
 import { Side } from "../../src/engine/types";
 import type { Engine } from "../../src/engine/engine";
-import { hitTest, type LayoutParams } from "../../src/render/layout";
+import { drawnRowSpan, hitTest, type LayoutParams } from "../../src/render/layout";
 import { Pipeline } from "../../src/worker/pipeline";
 
 /**
@@ -135,18 +135,34 @@ describe("inspector probe (layout)", () => {
     expect(hitTest(100, 844 - 58, spine, 1200, 1201, 6)).toBeNull();
   });
 
-  it("lets no row drawn wholly inside the bottom band answer", () => {
-    // The band starts at 814 in an 860-tall view. A pointer at 810 reaches
-    // rows centred down to about 817 by distance; only those with a visible
-    // pixel above 814 are in bounds.
-    const hit = hitTest(700, 810, seam, 1200, 1201, 6)!;
-    const bandTop = 860 - 46;
-    const rowAt = (t: number) => (1000 - t) * 1.1 + 430;
-    for (let t = Math.ceil(hit.tickAt - hit.reachTicks); t <= hit.tickAt + hit.reachTicks; t++) {
-      const inBounds = t >= hit.tickMin && t <= hit.tickMax;
-      expect(inBounds).toBe(rowAt(t) - 1 - 0.5 < bandTop);
+  it("bounds the search to rows with a visible pixel, as cells.ts draws them", () => {
+    // Every row near the top edge and the band, at several zooms, densities
+    // and sub-pixel phases: in bounds exactly when its snapped span shows a
+    // pixel centre on screen and above the band.
+    for (const dpr of [1, 1.25, 1.5, 2, 3]) {
+      for (const ppt of [0.37, 1.1, 1.154, 8, 20.3]) {
+        for (const phase of [0, 0.13, 0.5, 0.77]) {
+          const p = { ...seam, pxPerTick: ppt, dpr, centerTick: 100_000 + phase };
+          const bandTop = p.viewH - 46;
+          for (const yPtr of [0, 3, bandTop - 5, bandTop - 1]) {
+            const hit = hitTest(700, yPtr, p, 1e9, 1e9 + 1, 6)!;
+            for (let t = Math.ceil(hit.tickAt - hit.reachTicks); t <= hit.tickAt + hit.reachTicks; t++) {
+              const span = drawnRowSpan((p.centerTick - t) * ppt + 430, ppt, dpr);
+              const visible = span.bottom > 0 && span.top + 0.5 / dpr < bandTop;
+              expect(t >= hit.tickMin && t <= hit.tickMax).toBe(visible);
+            }
+          }
+        }
+      }
     }
-    expect(hit.tickMin).toBeGreaterThan(hit.tickAt - hit.reachTicks);
+  });
+
+  it("excludes a row whose snapped bottom edge lands on the top of the view", () => {
+    // 8 px/tick, dpr 1, rows 7px tall: centred at y = -4 a row is drawn over
+    // [-7, 0], no pixel on screen; centred at -3 it is drawn over [-6, 1].
+    const at = (yRow: number) => ({ ...seam, pxPerTick: 8, dpr: 1, centerTick: 1000 + (yRow - 430) / 8 });
+    expect(hitTest(700, 2, at(-4), 1e9, 1e9 + 1, 6)!.tickMax).toBeLessThan(1000);
+    expect(hitTest(700, 2, at(-3), 1e9, 1e9 + 1, 6)!.tickMax).toBeGreaterThanOrEqual(1000);
   });
 
   it("lets the lowest price answer below its centre", () => {

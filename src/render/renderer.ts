@@ -177,6 +177,7 @@ export class Renderer {
     this.overlay.resize(cssW, cssH, dpr);
     this.layoutParams.viewW = cssW;
     this.layoutParams.viewH = cssH;
+    this.layoutParams.dpr = dpr;
   }
 
   /** One animation frame: request the next state, draw the current one. */
