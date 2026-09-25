@@ -390,13 +390,17 @@ row's centre still sits on its price. Price grouping stays unexplored, and the
 ~7px figure above says nothing about live.
 
 The inspector does not demand a direct hit either. `hitTest` (`layout.ts`)
-sends the worker a probe: the rows within 6 CSS px of the pointer (14 for a
-finger), searched nearest first, and in a row the order whose queue span holds
-the pointer, with the same slop past the back of the queue. On the bundled
-replay, the old exact lookup opened the inspector for 56% of pointer positions
-on a drawn cell and 12% of those within 3px of one at 1440x860 (56% and 4% on a
-390x844 3x phone); the probe opens it for all of both, at both sizes (measured
-headlessly, 2026-09-24).
+sends the worker a probe: the fractional tick under the pointer and a reach in
+ticks, which is half the drawn row plus half a pixel plus 6 CSS px of slop (14
+for a finger), so the reach is the same distance on screen at every zoom. The
+worker searches the rows within reach nearest first, and in a row takes the
+order whose queue span holds the pointer, with the same slop past the back of
+the queue. The bottom chrome band (`BAND_PX`), where cells are fully
+transparent, answers nothing. On the bundled replay, the old exact lookup
+opened the inspector for 56% of pointer positions on a drawn cell and 12% of
+those within 3px of one at 1440x860 (56% and 4% on a 390x844 3x phone); the
+probe opens it for all of both, at both sizes (measured headlessly,
+2026-09-24).
 
 Stillness is then the default state, not a resting point something approaches.
 **The camera never moves on its own** — and now it very nearly never moves at
@@ -418,7 +422,15 @@ camera's own centre stays continuous for the deadband and glide math
 agrees). That snapped centre reaches the shader as a whole tick plus a pixel
 remainder (`splitCenterForGpu`), because a float32 uniform at BTC's price
 resolves only half a tick, which had quantized every pan and designed move
-into 4px jumps at 8 px/tick. There is now
+into 4px jumps at 8 px/tick. Whole ticks are exact in float32 only below 2^24
+($167,772.16), and the bundled replay rests asks out to $484M, where float32
+spacing is 4,096 ticks: a row there drew up to thousands of pixels from its
+price and hover could not find it (0% of far rows answered at $21M, 25% at
+$5M). So every tick crosses to the GPU as two floats, `hi = fround(tick)` and
+`lo = tick - hi`, for each order (frame field 6) and for the centre; the
+shader subtracts hi from hi and lo from lo, both exact, and every row lands on
+its price at any altitude (100% answered at every price tested, 2026-09-25,
+headless). There is now
 exactly one automatic move: a 650ms smootherstep to an endpoint fixed when it
 starts, fired when the mid has stayed more than a tenth of the viewport off
 centre for half a second, or when the committed zoom changes. The half second
@@ -494,7 +506,9 @@ Nothing at rest; everything within one gesture:
 2. **First tap/click anywhere** → quiet chrome fades in: mid/spread readout in the
    gap, price ticks along the seam, the control strip (pause, speed, mode), the
    tape (recent prints with aggressor side) in the bottom-right dead quadrant on
-   desktop, a pull-up sheet on phone. Fades away after idle.
+   desktop, a pull-up sheet on phone. Fades away after idle. The tape holds
+   only the rows that fit whole inside 40% of the viewport and ends on a whole
+   row, with no gradient: a mask fade on its last rows read as a fault.
 3. **Detector captions** (§11) — when the market does something while the viewer is
    engaged, one quiet sentence fades in near the top of the frame ("a sell just swept 3
    levels: $41k in 80ms"), holds, and fades out. Captions are chrome: one that

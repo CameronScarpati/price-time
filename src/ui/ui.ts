@@ -381,14 +381,15 @@ export class Ui {
       el("span", "inspector-dim", row, `${formatDecimal(t.sats, 8)} BTC`);
     }
     // Keep only the rows that fit whole. The list clips at its max-height,
-    // and a row cut through there, or faded out, reads as a fault. Rows are
-    // positioned against the list (style.css), so one layout read covers all.
+    // and a row cut through there, or faded out, reads as a fault. Measured
+    // as fractional rects: offsetTop/clientHeight round to whole pixels, and
+    // rows are 17.25px tall, so a rounded check let half a pixel shear.
     if (meta.tape.length > 0) {
-      const fit = this.tapeList.clientHeight;
-      let last = this.tapeList.lastElementChild as HTMLElement | null;
-      while (last !== null && last.offsetTop + last.offsetHeight > fit) {
+      const clip = this.tapeList.getBoundingClientRect().bottom + 0.01;
+      let last = this.tapeList.lastElementChild;
+      while (last !== null && last.getBoundingClientRect().bottom > clip) {
         last.remove();
-        last = this.tapeList.lastElementChild as HTMLElement | null;
+        last = this.tapeList.lastElementChild;
       }
     }
   }

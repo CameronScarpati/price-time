@@ -206,7 +206,7 @@ html, body {
 /* The panel stays within 40% of the viewport. The list clips there, and
  * renderTape drops every row the clip would cut, so the panel always ends on
  * a whole row above its own padding: no row sheared mid-glyph, no fade. */
-.tape-list { position: relative; max-height: calc(40vh - 36px); overflow: hidden; }
+.tape-list { max-height: calc(40vh - 36px); overflow: hidden; }
 .tape-buy { color: #49adf7; }
 .tape-sell { color: #ffab4a; }
 @media (max-width: 600px) { .tape { display: none; } }
