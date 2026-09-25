@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   snapCenterToDeviceGrid, splitCenterForGpu, tickToY, yToTick,
 } from "../../src/render/layout";
+import { TICK_SPLIT } from "../../src/worker/protocol";
 
 /**
  * The standpoint must survive the trip into a float32 uniform. At BTC's
@@ -108,23 +109,35 @@ describe("float32 standpoint split", () => {
   });
 });
 
-describe("float32 standpoint split at far prices", () => {
-  /** cells.ts's y with the hi/lo split: hi from hi, lo from lo, then the sum. */
+describe("integer tick split at far prices", () => {
+  /** cells.ts's y: the halves arrive as float32, int() them, subtract as
+   * 32-bit integers with the high difference clamped, then one float32
+   * multiply and add. Integer steps are exact, so evaluation order is moot. */
   function splitShaderY(tick: number, centerTick: number, ppt: number, centerYPx: number): number {
     const c = splitCenterForGpu(centerTick, ppt, centerYPx);
-    const aHi = f(tick);
-    const aLo = f(tick - aHi);
-    const dTick = f(f(f(c.hi) - aHi) + f(f(c.lo) - aLo));
-    return f(f(dTick * f(ppt)) + f(c.yPx));
+    const aHi = f(Math.floor(tick / TICK_SPLIT));
+    const aLo = f(tick - aHi * TICK_SPLIT);
+    const dHi = Math.min(Math.max(Math.trunc(f(c.hi)) - Math.trunc(aHi), -64), 64);
+    const dTick = (dHi * TICK_SPLIT + (Math.trunc(f(c.lo)) - Math.trunc(aLo))) | 0;
+    return f(f(f(dTick) * f(ppt)) + f(c.yPx));
   }
 
-  it("sends a centre whose hi and lo are float32 values summing to the whole tick", () => {
-    for (const center of [6_393_899.4, 16_777_217.3, 100_000_065.6, 2_100_000_000.2, 48_398_000_128.7]) {
+  it("sends a centre as two whole float32 halves of the whole tick", () => {
+    for (const center of [6_393_899.4, 16_777_217.3, 100_000_065.6, 2_100_000_000.2, 48_398_000_128.7, -3.4]) {
       const c = splitCenterForGpu(center, 1.1, VIEW_H / 2);
       expect(f(c.hi)).toBe(c.hi);
       expect(f(c.lo)).toBe(c.lo);
-      expect(c.hi + c.lo).toBe(c.tick);
+      expect(Number.isInteger(c.hi) && Number.isInteger(c.lo)).toBe(true);
+      expect(c.lo >= 0 && c.lo < TICK_SPLIT).toBe(true);
+      expect(c.hi * TICK_SPLIT + c.lo).toBe(c.tick);
     }
+  });
+
+  it("keeps a row whose halves differ by the clamp far off screen", () => {
+    // 64 whole halves away is over a billion ticks: at the widest zoom
+    // (0.0008 px/tick) still hundreds of thousands of pixels out.
+    const y = splitShaderY(1, 48_398_000_128, 0.0008, VIEW_H / 2);
+    expect(y).toBeGreaterThan(100_000);
   });
 
   it("draws rows within 1e-3 px of the float64 layout out to the farthest ask", () => {

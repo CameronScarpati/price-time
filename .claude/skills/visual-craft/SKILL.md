@@ -105,9 +105,9 @@ whole number of them. Two rules fall out, both measured:
   a tick, which quantized every pan and designed move into 4px jumps at 8
   px/tick and undid the snap. Past 2^24 ticks ($167,772.16) float32 cannot
   hold a whole tick either, so every tick, the centre's and each order's,
-  crosses as `hi = fround(tick)` plus `lo = tick - hi` and the shader
-  subtracts the pairs separately; without it the far asks drew thousands of
-  pixels off their price.
+  crosses as two whole-number halves (`tick mod 2^24`, `floor(tick / 2^24)`)
+  that the shader subtracts as integers, exact in any evaluation order;
+  without it the far asks drew thousands of pixels off their price.
 
 Both are presentation at the smallest scale that exists here: neither can
 move anything by as much as one device pixel.

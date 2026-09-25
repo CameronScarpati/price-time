@@ -2,7 +2,7 @@ import type { Engine } from "../engine/engine";
 import { NIL } from "../engine/store";
 import { FLAG_LIQUIDATION } from "../engine/store";
 import { Side } from "../engine/types";
-import { FRAME_HEADER_FLOATS, FRAME_MAX_INSTANCES, FRAME_STRIDE, Header } from "./protocol";
+import { FRAME_HEADER_FLOATS, FRAME_MAX_INSTANCES, FRAME_STRIDE, Header, TICK_SPLIT } from "./protocol";
 
 /**
  * Serialize the engine's resting book into the binary frame the renderer
@@ -51,15 +51,15 @@ export function packFrame(
           continue;
         }
         if (i < 15) coreSizes.push(store.sats[slot]);
-        f32[write] = store.tick[slot];
+        // The tick in two integer halves float32 holds exactly (protocol.ts).
+        const tickHi = Math.floor(store.tick[slot] / TICK_SPLIT);
+        f32[write] = store.tick[slot] - tickHi * TICK_SPLIT;
         f32[write + 1] = cumBefore;
         f32[write + 2] = store.sats[slot];
         f32[write + 3] = side;
         f32[write + 4] = restedAtSecOf(slot);
         f32[write + 5] = (store.flags[slot] & FLAG_LIQUIDATION) !== 0 ? 1 : 0;
-        // What float32 drops from the tick: an integer no larger than half
-        // the float32 spacing, which float32 holds exactly.
-        f32[write + 6] = store.tick[slot] - Math.fround(store.tick[slot]);
+        f32[write + 6] = tickHi;
         write += FRAME_STRIDE;
         instances++;
         cumBefore += store.sats[slot];

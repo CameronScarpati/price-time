@@ -4,7 +4,7 @@ import { CHROME_FADE_MS, chromeFadeAlpha, Ui } from "../../src/ui/ui";
 import { Side } from "../../src/engine/types";
 import type { Renderer } from "../../src/render/renderer";
 import type {
-  FrameMeta, InspectionResult, MainToWorker, WorkerToMain,
+  FrameMeta, InspectionResult, MainToWorker, TapeRow, WorkerToMain,
 } from "../../src/worker/protocol";
 
 /**
@@ -52,10 +52,20 @@ describe("chromeFadeAlpha", () => {
 // The Ui itself, on a minimal stand-in DOM (the suite runs in node).
 // ---------------------------------------------------------------------------
 
+/** Stand-in layout for the tape trim: each list child is TAPE_ROW_PX tall
+ * from the list's top, and the list clips at tapeClipPx. Fractional on
+ * purpose, as real rows are. */
+const TAPE_ROW_PX = 17.25;
+let tapeClipPx = 241.2;
+
 class FakeNode {
   className = "";
   textContent = "";
-  innerHTML = "";
+  parent: FakeNode | null = null;
+  set innerHTML(_: string) {
+    for (const c of this.children) c.parent = null;
+    this.children.length = 0;
+  }
   href = "";
   target = "";
   rel = "";
@@ -78,8 +88,24 @@ class FakeNode {
   setAttribute(): void {}
   addEventListener(): void {}
   appendChild<T>(child: T): T {
-    if (child instanceof FakeNode) this.children.push(child);
+    if (child instanceof FakeNode) {
+      this.children.push(child);
+      child.parent = this;
+    }
     return child;
+  }
+  get lastElementChild(): FakeNode | null {
+    return this.children.at(-1) ?? null;
+  }
+  remove(): void {
+    if (this.parent === null) return;
+    this.parent.children.splice(this.parent.children.indexOf(this), 1);
+    this.parent = null;
+  }
+  getBoundingClientRect(): { bottom: number } {
+    if (this.className === "tape-list") return { bottom: tapeClipPx };
+    const i = this.parent?.children.indexOf(this) ?? 0;
+    return { bottom: (i + 1) * TAPE_ROW_PX };
   }
   find(className: string): FakeNode {
     for (const c of this.children) {
@@ -99,13 +125,17 @@ class FakeNode {
 }
 
 let clock = 0;
+const windowListeners = new Map<string, () => void>();
 
 function stubDom(reduced = false): void {
   vi.stubGlobal("document", {
     createElement: () => new FakeNode(),
     createTextNode: () => new FakeNode(),
   });
-  vi.stubGlobal("window", { addEventListener: () => {} });
+  windowListeners.clear();
+  vi.stubGlobal("window", {
+    addEventListener: (type: string, fn: () => void) => windowListeners.set(type, fn),
+  });
   vi.stubGlobal("matchMedia", (q: string) => ({ matches: reduced && q.includes("reduced-motion") }));
 }
 
@@ -123,14 +153,14 @@ function makeUi(reduced = false): { ui: Ui; root: FakeNode } {
   return { ui, root };
 }
 
-function meta(caption: { text: string; id: number } | null): FrameMeta {
+function meta(caption: { text: string; id: number } | null, tape: TapeRow[] = []): FrameMeta {
   return {
     mode: "synthetic",
     seededFromLive: false,
     degraded: false,
     clock: { state: "live", behindMs: 0, speed: 1 },
     nowSec: 0,
-    tape: [],
+    tape,
     caption,
     narration: "",
     stats: { msgsPerSec: 0, tradesPerMin: 0, orders: 0, anomalies: 0, coreMedianSats: 1 },
@@ -141,6 +171,7 @@ function meta(caption: { text: string; id: number } | null): FrameMeta {
 
 beforeEach(() => {
   clock = 0;
+  tapeClipPx = 241.2;
   vi.spyOn(performance, "now").mockImplementation(() => clock);
 });
 afterEach(() => {
@@ -352,5 +383,39 @@ describe("stylesheet stillness", () => {
     expect(frames).not.toBeNull();
     expect(frames![1]).not.toMatch(/transform|translate/);
     expect(frames![1]).toMatch(/opacity/);
+  });
+});
+
+describe("Ui tape", () => {
+  const prints: TapeRow[] = Array.from({ length: 24 }, (_, i) => ({
+    tick: 6_400_000 + i, sats: 1_000_000, aggressor: i % 2 === 0 ? Side.Bid : Side.Ask, atMs: 1000 + i,
+  }));
+
+  it("keeps only the rows that end inside the clip, to the fraction of a pixel", () => {
+    const { ui, root } = makeUi();
+    ui.engage();
+    ui.chromeAlpha();
+    clock = CHROME_FADE_MS;
+    expect(ui.chromeAlpha()).toBe(1);
+    ui.onMeta(meta(null, prints));
+    // 13 rows end at 224.25px; the 14th ends at 241.5, 0.3px past a 241.2
+    // clip. A whole-pixel check (241 <= 241) kept it and sheared its glyphs.
+    expect(root.find("tape-list").children.length).toBe(13);
+  });
+
+  it("refits on resize even while the chrome is hidden", () => {
+    const { ui, root } = makeUi();
+    ui.engage();
+    ui.chromeAlpha();
+    clock = CHROME_FADE_MS;
+    expect(ui.chromeAlpha()).toBe(1);
+    ui.onMeta(meta(null, prints));
+    clock = 60_000;
+    ui.chromeAlpha();
+    expect(ui.chromeAlpha()).toBe(0);
+    tapeClipPx = 120;
+    windowListeners.get("resize")!();
+    ui.onMeta(meta(null, prints)); // same prints, chrome hidden
+    expect(root.find("tape-list").children.length).toBe(6);
   });
 });

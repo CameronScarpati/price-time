@@ -245,7 +245,9 @@ export class Ui {
       this.narrator.textContent = meta.narration;
     }
 
-    if (this.alpha > 0.05) this.renderTape(meta);
+    // A resize voids the fit (lastTapeStamp -1): rebuild at once, hidden or
+    // not, so the frame the chrome fades back in on already ends whole.
+    if (this.alpha > 0.05 || this.lastTapeStamp === -1) this.renderTape(meta);
     if (this.showHud) this.renderHud(meta);
 
     // While the inspector is open, re-resolve its order against the live
@@ -324,6 +326,7 @@ export class Ui {
     const token = ++this.inspectToken;
     this.post({
       type: "inspect", token, sides: hit.sides, tickAt: hit.tickAt, reachTicks: hit.reachTicks,
+      tickMin: hit.tickMin, tickMax: hit.tickMax,
       cumSats: Math.round(hit.cumSats), satsSlop: Math.round(hit.satsSlop),
     });
     this.inspector.style.left = `${Math.min(clientX + 14, innerWidth - 260)}px`;

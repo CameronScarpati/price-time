@@ -1,4 +1,5 @@
 import { Side } from "../engine/types";
+import { TICK_SPLIT } from "../worker/protocol";
 
 /**
  * The CPU mirror of the vertex shader's layout math — used for hit-testing
@@ -58,27 +59,26 @@ export function snapCenterToDeviceGrid(
  * The whole tick is exact in float32 only below 2^24 ($167,772.16), and the
  * camera can travel to the book's far asks ($484M in the bundled replay),
  * where float32 spacing is 4,096 ticks. So the whole tick crosses as two
- * floats, `hi = fround(tick)` and `lo = tick - hi`, the same split the packer
- * gives every order's tick. The shader subtracts hi from hi and lo from lo:
- * two float32 values within a screen of each other subtract exactly
- * (Sterbenz), and each lo is an integer no larger than half the spacing, so
- * the row offset is exact at any price. Below 2^24 every lo is 0 and the
- * arithmetic is the old one. The sum is `tickToY` rearranged, so
- * hit-testing (which stays float64) agrees.
+ * integer halves, `hi = floor(tick / 2^24)` and `lo = tick - hi * 2^24`, the
+ * split the packer gives every order's tick, and the shader subtracts them in
+ * integer arithmetic, which is exact whatever order a compiler evaluates it
+ * in. Below 2^24 every hi is 0 and lo is the tick. The result is `tickToY`
+ * rearranged, so hit-testing (which stays float64) agrees.
  */
 export function splitCenterForGpu(
   centerTick: number, pxPerTick: number, centerYPx: number,
 ): { tick: number; hi: number; lo: number; yPx: number } {
   const tick = Math.round(centerTick);
-  const hi = Math.fround(tick);
-  return { tick, hi, lo: tick - hi, yPx: centerYPx + (centerTick - tick) * pxPerTick };
+  const hi = Math.floor(tick / TICK_SPLIT);
+  return { tick, hi, lo: tick - hi * TICK_SPLIT, yPx: centerYPx + (centerTick - tick) * pxPerTick };
 }
 
 /**
  * The chrome bands at the top and bottom of the frame, in CSS px. Cells fade
  * out over 26px as they approach each band and are fully transparent inside
- * the bottom one (cells.ts), so hit-testing refuses the bottom band: a row
- * nobody can see must not answer the pointer. The top band keeps some alpha
+ * the bottom one (cells.ts), so hit-testing refuses a pointer in the bottom
+ * band and a row drawn wholly inside it: a row nobody can see must not answer
+ * the pointer. The top band keeps some alpha
  * at y = 0 and stays pickable.
  */
 export const BAND_PX = [
@@ -111,13 +111,16 @@ export const HIT_SLOP_PX = { mouse: 6, touch: 14 } as const;
 
 /** What the worker searches for the order under the pointer: the rows on
  * `sides` whose price lies within `reachTicks` of `tickAt` (the fractional
- * tick under the pointer), nearest first, and in a row the order whose queue
- * span holds `cumSats`, allowing `satsSlop` past the end of the queue (where
- * the shortest cells are drawn longer than their size). */
+ * tick under the pointer) and inside `tickMin..tickMax` (the rows with any
+ * visible pixel), nearest first, and in a row the order whose queue span
+ * holds `cumSats`, allowing `satsSlop` past the end of the queue (where the
+ * shortest cells are drawn longer than their size). */
 export interface HitProbe {
   sides: Side[];
   tickAt: number;
   reachTicks: number;
+  tickMin: number;
+  tickMax: number;
   cumSats: number;
   satsSlop: number;
 }
@@ -126,14 +129,22 @@ export function hitTest(
   x: number, y: number, p: LayoutParams, bestBid: number, bestAsk: number,
   slopPx: number = HIT_SLOP_PX.mouse,
 ): HitProbe | null {
-  if (y >= p.viewH - BAND_PX[p.layout].bottom) return null;
-  const tickAt = p.centerTick - (y - p.viewH * (p.centerYFrac ?? 0.5)) / p.pxPerTick;
-  if (Math.round(tickAt) <= 0) return null;
+  const bandTop = p.viewH - BAND_PX[p.layout].bottom;
+  if (y >= bandTop) return null;
+  const centerY = p.viewH * (p.centerYFrac ?? 0.5);
+  const tickAt = p.centerTick - (y - centerY) / p.pxPerTick;
   // Reach is measured from a row's CENTRE, so it is half the drawn row plus
   // the slop, plus half a pixel for the shader snapping the row's edges to
   // the device grid. Zoomed in a row is many pixels tall and a whole-tick
   // radius would round the slop away; zoomed out it spans many ticks.
-  const reachTicks = (rowHalfPx(p.pxPerTick) + 0.5 + slopPx) / p.pxPerTick;
+  const edgePx = rowHalfPx(p.pxPerTick) + 0.5;
+  const reachTicks = (edgePx + slopPx) / p.pxPerTick;
+  // Only rows with a visible pixel answer: a row wholly inside the bottom
+  // band, where cells are transparent, or wholly above the top of the view,
+  // is out of reach however near the pointer. Prices start at one tick.
+  const tickMin = Math.max(1, p.centerTick - (bandTop + edgePx - centerY) / p.pxPerTick);
+  const tickMax = p.centerTick + (centerY + edgePx) / p.pxPerTick;
+  if (tickAt + reachTicks < tickMin || tickAt - reachTicks > tickMax) return null;
   const satsSlop = slopPx / p.pxPerSat;
   if (p.layout === 0) {
     // The seam separates the sides spatially; price confirms it. A bid can
@@ -142,7 +153,10 @@ export function hitTest(
     const side = x < p.seamX ? Side.Bid : Side.Ask;
     if (side === Side.Bid && tickAt - reachTicks > bestBid) return null;
     if (side === Side.Ask && tickAt + reachTicks < bestAsk) return null;
-    return { sides: [side], tickAt, reachTicks, cumSats: Math.abs(x - p.seamX) / p.pxPerSat, satsSlop };
+    return {
+      sides: [side], tickAt, reachTicks, tickMin, tickMax,
+      cumSats: Math.abs(x - p.seamX) / p.pxPerSat, satsSlop,
+    };
   }
   if (x < p.seamX - slopPx) return null;
   // The spine stacks both sides in one column; near the spread either may
@@ -151,5 +165,8 @@ export function hitTest(
   if (tickAt - reachTicks <= bestBid) sides.push(Side.Bid);
   if (tickAt + reachTicks >= bestAsk) sides.push(Side.Ask);
   if (sides.length === 0) return null;
-  return { sides, tickAt, reachTicks, cumSats: Math.max(x - p.seamX, 0) / p.pxPerSat, satsSlop };
+  return {
+    sides, tickAt, reachTicks, tickMin, tickMax,
+    cumSats: Math.max(x - p.seamX, 0) / p.pxPerSat, satsSlop,
+  };
 }

@@ -65,6 +65,15 @@ describe("inspector probe (worker)", () => {
     expect(p.inspect([Side.Bid], best + 0.6, 0.55, 0, 0)).toBeNull();
   });
 
+  it("searches only the rows inside the visible bounds", () => {
+    const { p, engine } = started();
+    const best = engine.bids.bestTick()!;
+    const front = queue(engine, Side.Bid, best)[0]!;
+    expect(p.inspect([Side.Bid], best + 0.6, 1, 0, 0, best, best)?.id).toBe(front.id);
+    expect(p.inspect([Side.Bid], best + 0.6, 1, 0, 0, best + 1, Infinity)).toBeNull();
+    expect(p.inspect([Side.Bid], best + 0.6, 1, 0, 0, 1, best - 1)).toBeNull();
+  });
+
   it("takes the nearer of two rows first", () => {
     const { p, engine } = started();
     const ticks = engine.bids.ticks;
@@ -124,6 +133,34 @@ describe("inspector probe (layout)", () => {
     expect(hitTest(700, 860 - 46, seam, 1200, 1201, 6)).toBeNull();
     const spine: LayoutParams = { ...seam, viewW: 390, viewH: 844, seamX: 10, layout: 1 };
     expect(hitTest(100, 844 - 58, spine, 1200, 1201, 6)).toBeNull();
+  });
+
+  it("lets no row drawn wholly inside the bottom band answer", () => {
+    // The band starts at 814 in an 860-tall view. A pointer at 810 reaches
+    // rows centred down to about 817 by distance; only those with a visible
+    // pixel above 814 are in bounds.
+    const hit = hitTest(700, 810, seam, 1200, 1201, 6)!;
+    const bandTop = 860 - 46;
+    const rowAt = (t: number) => (1000 - t) * 1.1 + 430;
+    for (let t = Math.ceil(hit.tickAt - hit.reachTicks); t <= hit.tickAt + hit.reachTicks; t++) {
+      const inBounds = t >= hit.tickMin && t <= hit.tickMax;
+      expect(inBounds).toBe(rowAt(t) - 1 - 0.5 < bandTop);
+    }
+    expect(hit.tickMin).toBeGreaterThan(hit.tickAt - hit.reachTicks);
+  });
+
+  it("lets the lowest price answer below its centre", () => {
+    // The $0.01 row, pointed at 0.8px and 5px below its centre: the pointer
+    // is on the row, then inside the slop.
+    const low = { ...seam, centerTick: 273.78, pxPerTick: 1.154 };
+    const y1 = (273.78 - 1) * 1.154 + 430;
+    for (const dy of [0.8, 5]) {
+      const hit = hitTest(700, y1 + dy, low, 999, 1001, 6)!;
+      expect(hit).not.toBeNull();
+      expect(hit.tickMin).toBe(1);
+      expect(Math.abs(1 - hit.tickAt)).toBeLessThanOrEqual(hit.reachTicks);
+    }
+    expect(hitTest(700, y1 + 9, low, 999, 1001, 6)).toBeNull();
   });
 
   it("probes in float64 at any price", () => {

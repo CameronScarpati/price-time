@@ -395,8 +395,10 @@ ticks, which is half the drawn row plus half a pixel plus 6 CSS px of slop (14
 for a finger), so the reach is the same distance on screen at every zoom. The
 worker searches the rows within reach nearest first, and in a row takes the
 order whose queue span holds the pointer, with the same slop past the back of
-the queue. The bottom chrome band (`BAND_PX`), where cells are fully
-transparent, answers nothing. On the bundled replay, the old exact lookup
+the queue. Only rows with a visible pixel answer: a pointer in the bottom chrome
+band (`BAND_PX`), where cells are fully transparent, gets nothing, and neither
+does a row drawn wholly inside that band or above the top of the view,
+however near the pointer. On the bundled replay, the old exact lookup
 opened the inspector for 56% of pointer positions on a drawn cell and 12% of
 those within 3px of one at 1440x860 (56% and 4% on a 390x844 3x phone); the
 probe opens it for all of both, at both sizes (measured headlessly,
@@ -426,11 +428,13 @@ into 4px jumps at 8 px/tick. Whole ticks are exact in float32 only below 2^24
 ($167,772.16), and the bundled replay rests asks out to $484M, where float32
 spacing is 4,096 ticks: a row there drew up to thousands of pixels from its
 price and hover could not find it (0% of far rows answered at $21M, 25% at
-$5M). So every tick crosses to the GPU as two floats, `hi = fround(tick)` and
-`lo = tick - hi`, for each order (frame field 6) and for the centre; the
-shader subtracts hi from hi and lo from lo, both exact, and every row lands on
-its price at any altitude (100% answered at every price tested, 2026-09-25,
-headless). There is now
+$5M). So every tick crosses to the GPU as two whole numbers float32 holds
+exactly, `tick mod 2^24` and `floor(tick / 2^24)`, for each order (frame
+fields 0 and 6) and for the centre, and the shader subtracts them as integers.
+A float hi/lo pair would be exact only in the order written, and GLSL ES 3.00
+lets a compiler reorder float math; integer subtraction is exact in any
+order. Every row lands on its price at any altitude (100% answered at every
+price tested, 2026-09-25, headless). There is now
 exactly one automatic move: a 650ms smootherstep to an endpoint fixed when it
 starts, fired when the mid has stayed more than a tenth of the viewport off
 centre for half a second, or when the committed zoom changes. The half second

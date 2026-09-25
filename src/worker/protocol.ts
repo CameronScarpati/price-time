@@ -11,7 +11,8 @@ import type { SourceKind } from "../sources/source";
  *
  *   [0..HEADER)                     header (see Header indices below)
  *   [HEADER + i*STRIDE ...]         one resting order per instance:
- *       +0  tick        price in ticks
+ *       +0  tick        price in ticks, modulo TICK_SPLIT (2^24): the whole
+ *                       price for every order below $167,772.16
  *       +1  cumBefore   sats resting ahead of this order at its level
  *       +2  sats        remaining quantity
  *       +3  side        0 bid / 1 ask
@@ -23,15 +24,17 @@ import type { SourceKind } from "../sources/source";
  *                       between market events, which is what lets the worker
  *                       skip the pack and the renderer skip the upload.
  *       +5  flags       bit0 liquidation
- *       +6  tickLo      tick - fround(tick): the part of the price float32
- *                       drops. +0 holds fround(tick), which is the exact tick
- *                       only below 2^24 ($167,772.16). Past that +0 alone is
- *                       off by up to half its float32 spacing: 128 ticks at
- *                       $21M, 2,048 at the $484M asks a real book rests. The
- *                       shader subtracts the two halves separately (cells.ts),
- *                       so a row a viewer pans out to is drawn at its price.
- *                       0 for every order near the BTC/USD mid.
+ *       +6  tickHi      floor(tick / 2^24), so tick = tickHi * 2^24 + (+0).
+ *                       float32 holds a whole tick exactly only below 2^24;
+ *                       a real book rests asks out to $484M, where float32
+ *                       spacing is 4,096 ticks. Both halves are integers
+ *                       float32 holds exactly, and the shader subtracts them
+ *                       as INTEGERS (cells.ts), so no compiler reordering of
+ *                       float math can merge them back into one rounded
+ *                       tick, and a row a viewer pans out to is drawn at its
+ *                       price. 0 for every order near the BTC/USD mid.
  */
+export const TICK_SPLIT = 16_777_216;
 export const FRAME_HEADER_FLOATS = 16;
 export const FRAME_STRIDE = 7;
 export const FRAME_MAX_INSTANCES = 32_768;
@@ -62,9 +65,10 @@ export const Header = {
    * wander a little past the last order, never into the void beyond. */
   LoTick: 9,
   HiTick: 10,
-  /** The float32 remainders of LoTick and HiTick (value - fround(value)), as
-   * for an instance's tickLo: the camera clamps to the exact extent, and the
-   * farthest real ask is two thousand ticks past its float32 rounding. */
+  /** The float32 remainders of LoTick and HiTick (value - fround(value)),
+   * summed in float64 on the main thread: the camera clamps to the exact
+   * extent, and the farthest real ask is two thousand ticks past its float32
+   * rounding. */
   LoTickLo: 12,
   HiTickLo: 13,
   /** Which book state this buffer holds. The worker stamps it; on the next
@@ -155,7 +159,7 @@ export type MainToWorker =
   /** Find the order drawn nearest the pointer (render/layout.ts HitProbe). */
   | {
     type: "inspect"; token: number; sides: Side[]; tickAt: number;
-    reachTicks: number; cumSats: Sats; satsSlop: Sats;
+    reachTicks: number; tickMin: number; tickMax: number; cumSats: Sats; satsSlop: Sats;
   }
   /** Re-resolve a previously inspected order by id. A null reply means it
    * left the book (filled or cancelled) — the inspector's cue to close. */

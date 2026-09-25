@@ -17,17 +17,17 @@ import { cornerBuffer, createProgram } from "./context";
 
 const VS = `#version 300 es
 layout(location=0) in vec2 aCorner;
-layout(location=1) in float aTick;
+layout(location=1) in float aTick;     // tick modulo 2^24, see protocol.ts
 layout(location=2) in float aCumBefore;
 layout(location=3) in float aSats;
 layout(location=4) in float aSide;
 layout(location=5) in float aRestedAtSec;
 layout(location=6) in float aFlags;
-layout(location=7) in float aTickLo;   // tick - fround(tick), see protocol.ts
+layout(location=7) in float aTickHi;   // floor(tick / 2^24)
 
 uniform vec2 uViewPx;
-uniform float uCenterTick;   // fround of the whole centre tick
-uniform float uCenterTickLo; // the rest of it; see splitCenterForGpu
+uniform float uCenterTick;   // the whole centre tick modulo 2^24
+uniform float uCenterTickHi; // floor(centre tick / 2^24); see splitCenterForGpu
 uniform float uPxPerTick;
 uniform float uPxPerSat;
 uniform float uSeamX;
@@ -62,9 +62,15 @@ const vec3 BID_EMBER = vec3(0.10, 0.24, 0.42);
 const vec3 ASK_EMBER = vec3(0.45, 0.25, 0.10);
 
 void main() {
-  // Hi from hi and lo from lo, then the sum: each difference is exact, where
-  // a single float32 tick is exact only below 2^24 (see splitCenterForGpu).
-  float y = ((uCenterTick - aTick) + (uCenterTickLo - aTickLo)) * uPxPerTick + uCenterYPx;
+  // The tick offset from the centre, in integer arithmetic: a float32 tick
+  // is exact only below 2^24, and float math on the two halves is exact only
+  // in the order written, which a compiler is free to change. Integer
+  // subtraction is exact in any order. Every half is a whole number float32
+  // holds exactly, so int() is exact. The high difference is clamped so the
+  // product cannot overflow; 63 * 2^24 ticks is past the viewport at any zoom.
+  int dHi = clamp(int(uCenterTickHi) - int(aTickHi), -64, 64);
+  int dTick = dHi * 16777216 + (int(uCenterTick) - int(aTick));
+  float y = float(dTick) * uPxPerTick + uCenterYPx;
   // Row height: a 1px breathing gap between adjacent ticks while zoomed in.
   // Zoomed out, a row keeps a floor of MIN_ROW_PX: on the live frame a tick
   // is about 1.1px, and rows drawn to that pitch were hairlines too faint to
@@ -243,7 +249,7 @@ export class CellPipeline {
     for (const name of [
       "uViewPx", "uCenterTick", "uPxPerTick", "uPxPerSat", "uSeamX",
       "uLayout", "uMinCellPx", "uMaxCellPx", "uDim", "uReduced",
-      "uCenterYPx", "uDpr", "uBandPx", "uViewHPx", "uNowSec", "uCenterTickLo",
+      "uCenterYPx", "uDpr", "uBandPx", "uViewHPx", "uNowSec", "uCenterTickHi",
     ]) {
       this.uniforms[name] = gl.getUniformLocation(this.program, name)!;
     }
@@ -276,8 +282,8 @@ export class CellPipeline {
     // rounded to half a tick, or to thousands of ticks at the far asks, on its
     // way into a float32 uniform. See splitCenterForGpu.
     const center = splitCenterForGpu(u.centerTick, u.pxPerTick, u.centerYPx);
-    gl.uniform1f(this.uniforms.uCenterTick, center.hi);
-    gl.uniform1f(this.uniforms.uCenterTickLo, center.lo);
+    gl.uniform1f(this.uniforms.uCenterTick, center.lo);
+    gl.uniform1f(this.uniforms.uCenterTickHi, center.hi);
     gl.uniform1f(this.uniforms.uPxPerTick, u.pxPerTick);
     gl.uniform1f(this.uniforms.uPxPerSat, u.pxPerSat);
     gl.uniform1f(this.uniforms.uSeamX, u.seamX);

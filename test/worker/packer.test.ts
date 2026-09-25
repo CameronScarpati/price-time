@@ -8,6 +8,7 @@ import {
   FRAME_HEADER_FLOATS,
   FRAME_MAX_INSTANCES,
   FRAME_STRIDE,
+  TICK_SPLIT,
   Header,
 } from "../../src/worker/protocol";
 
@@ -94,9 +95,9 @@ describe("packFrame content", () => {
     packFrame(engine, buffer, () => 7);
     const f32 = new Float32Array(buffer);
 
-    // [tick, cumBefore, sats, side, restedAtSec, flags, tickLo] per instance.
+    // [tick, cumBefore, sats, side, restedAtSec, flags, tickHi] per instance.
     // Bids pack first from the touch outward, then asks; within a level,
-    // queue order. tickLo is 0 anywhere near a real mid (below 2^24).
+    // queue order. tickHi is 0 anywhere near a real mid (below 2^24).
     const expected = [
       [6_503_790, 0, 100, Side.Bid, 7, 0, 0],
       [6_503_790, 100, 250, Side.Bid, 7, 0, 0],
@@ -129,8 +130,10 @@ describe("packFrame content", () => {
     const ticks: number[] = [];
     for (let i = 0; i < instances; i++) {
       const at = FRAME_HEADER_FLOATS + i * FRAME_STRIDE;
-      ticks.push(f32[at] + f32[at + 6]);
-      expect(Math.abs(f32[at + 6])).toBeLessThan(4_096);
+      // Two whole numbers float32 holds exactly: tick mod 2^24 and the rest.
+      expect(Number.isInteger(f32[at]) && f32[at] >= 0 && f32[at] < TICK_SPLIT).toBe(true);
+      expect(Number.isInteger(f32[at + 6])).toBe(true);
+      ticks.push(f32[at + 6] * TICK_SPLIT + f32[at]);
     }
     expect(ticks).toContain(farTick);
     expect(ticks).toContain(oddTick);
